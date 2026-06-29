@@ -1,15 +1,8 @@
-import { describe, expect, it } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import {
-  chmodSync,
-  copyFileSync,
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
 
 function runCheckPins(repoRoot: string) {
   return spawnSync('bash', ['scripts/check-pins.sh'], {
@@ -45,7 +38,7 @@ describe('check-pins.sh', () => {
     mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
     writeFileSync(
       join(dir, '.github', 'workflows', 'ci.yml'),
-      "name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\n",
+      'name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\n',
     );
     commitAll(dir);
     const r = runCheckPins(dir);
