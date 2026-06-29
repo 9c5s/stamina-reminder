@@ -1,16 +1,35 @@
+# Node / Bun
 node_modules/
+
+# Bun の lockfile はコミットする (= 除外しない)
+
+# Cloudflare Workers
+.wrangler/
 .dev.vars
 .dev.vars.*
 .env
 .env.*
-.wrangler/
+
+# Build artifacts
 dist/
 *.tsbuildinfo
+
+# IDE / OS
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Project-specific: SDD ledger ディレクトリは git 管理対象外とする。
+# global gitignore (~/.gitignore) で `superpowers/` が一律除外されているが、
+# 明示しておくことで将来 global を削除されても安全に保つ。
 .superpowers/
 
-# docs/superpowers/ は本プロジェクトの実装計画書 / spec を置く意図したディレクトリのため、
-# global gitignore (~/.gitignore) の `superpowers/` 一律除外を打ち消す。
+# Project-specific: global gitignore (~/.gitignore) で `superpowers/` が一律除外されているため、
+# 本プロジェクトの計画書・spec を置く docs/superpowers/ を打ち消す。
 !docs/superpowers/
 !docs/superpowers/**
