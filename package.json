@@ -1,0 +1,36 @@
+{
+  "name": "stamina-reminder",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "scripts": {
+    "lint:code": "biome check .",
+    "lint:code:fix": "biome check --write .",
+    "lint:actions": "actionlint && zizmor --pedantic --no-online-audits .github/workflows .github/dependabot.yml",
+    "lint": "bun run lint:code && bun run lint:actions",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "bun run lint:code && bun run typecheck && bun run test",
+    "ci": "bun run lint && bun run typecheck && bun run test",
+    "deploy": "wrangler deploy",
+    "register-commands": "bun scripts/register-commands.ts",
+    "check-pins": "bash scripts/check-pins.sh"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.4.0",
+    "hono": "^4.12.27"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@cloudflare/workers-types": "^4.20260629.1",
+    "@commitlint/cli": "^21.1.0",
+    "@commitlint/config-conventional": "^21.1.0",
+    "@types/bun": "^1.3.14",
+    "lefthook": "^2.1.9",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "wrangler": "^4.105.0"
+  },
+  "trustedDependencies": []
+}
