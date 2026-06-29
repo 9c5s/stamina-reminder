@@ -50,8 +50,6 @@ jobs:
           shellcheck: false
           pyflakes: false
           cache: false
-          github-token: ""
-          token: ""
 
       - name: zizmor (pedantic)
         uses: zizmorcore/zizmor-action@192e21d79ab29983730a13d1382995c2307fbcaa # v0.5.7
@@ -60,7 +58,6 @@ jobs:
           persona: pedantic
           advanced-security: false
           online-audits: false
-          token: ""
 
       - name: App check (lint:code / typecheck / test)
         run: bun run check
