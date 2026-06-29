@@ -1,0 +1,16 @@
+node_modules/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.wrangler/
+dist/
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+.superpowers/
+
+# docs/superpowers/ は本プロジェクトの実装計画書 / spec を置く意図したディレクトリのため、
+# global gitignore (~/.gitignore) の `superpowers/` 一律除外を打ち消す。
+!docs/superpowers/
+!docs/superpowers/**
