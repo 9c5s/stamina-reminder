@@ -295,6 +295,32 @@ describe('check-pins.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('exits 0 when workflow uses a quoted 40-char hex SHA value (uses: "...@<sha>")', () => {
+    const dir = makeTempRepo();
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      'name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: "actions/checkout@0123456789abcdef0123456789abcdef01234567"\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 0 when workflow uses a quoted local action value (uses: "./...")', () => {
+    const dir = makeTempRepo();
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      'name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: "./.github/actions/local"\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exits 0 when DISCORD_PUBLIC_KEY is committed as a 64-hex literal (public value, allowed)', () => {
     const dir = makeTempRepo();
     // wrangler.toml に実 64 hex の Ed25519 公開鍵を [vars] で commit するのが正式仕様 (spec §9)。
