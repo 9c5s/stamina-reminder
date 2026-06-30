@@ -359,7 +359,7 @@ OAuth 連携時に Cloudflare が自動生成する API Token は権限が広い
 - Account → **Workers Scripts: Edit**
 - Account → **Workers KV Storage: Read** (`wrangler deploy` は binding の存在検証のみで KV namespace の create / write は行わないため Read で十分。namespace 作成はローカル `wrangler kv namespace create` (OAuth セッション) で実施)
 - Account → **Account Settings: Read** (whoami / アカウント識別に必要)
-- Account → **User Details: Read**
+- User → **User Details: Read** (Cloudflare の API Token UI 上は User スコープにあり Account では選択できないため、category dropdown を `User` に切り替えてから選ぶ)
 - 対象 Account は `b40fdc1cf09112832597f6e05f829cae` (9c5s) のみに限定発行
 
 dashboard の `Workers & Pages → Project → Settings → Build → API Token` から既存 token を差し替える。auto-generated を残したまま運用しない。
