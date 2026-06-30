@@ -224,6 +224,35 @@ describe('check-pins.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('exits 1 when DISCORD_BOT_TOKEN has a quoted key (JSON/TOML) with a real-looking literal', () => {
+    const dir = makeTempRepo();
+    // JSON や TOML 形式で key を quote して書かれていても検出する
+    writeFileSync(
+      join(dir, 'config.json'),
+      '{"DISCORD_BOT_TOKEN": "AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789"}\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Secret-like/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('redacts the token value in the output when a real-looking literal is detected', () => {
+    const dir = makeTempRepo();
+    const fakeToken = 'AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789';
+    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=${fakeToken}\n`);
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    const output = r.stdout + r.stderr;
+    // [REDACTED] が出力に含まれる
+    expect(output).toMatch(/\[REDACTED\]/);
+    // 生の token は出力に含まれない (CI ログへの 2 次漏出を防ぐ)
+    expect(output).not.toContain(fakeToken);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exits 0 when DISCORD_PUBLIC_KEY is committed as a 64-hex literal (public value, allowed)', () => {
     const dir = makeTempRepo();
     // wrangler.toml に実 64 hex の Ed25519 公開鍵を [vars] で commit するのが正式仕様 (spec §9)。
