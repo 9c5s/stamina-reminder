@@ -511,7 +511,7 @@ git status
 - Account → **Workers Scripts: Edit**
 - Account → **Workers KV Storage: Read**
 - Account → **Account Settings: Read**
-- Account → **User Details: Read**
+- User → **User Details: Read** (CF の API Token UI 上は User スコープ。category dropdown を `User` に切り替えてから選ぶ)
 
 Account Resources: `Include → Specific account → 9c5s (b40fdc1cf09112832597f6e05f829cae)`。
 
