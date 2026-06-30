@@ -3,55 +3,56 @@ no_tty: true
 glob_matcher: doublestar
 
 pre-commit:
-  parallel: true
+  # トップレベルは直列実行。書き換え phase 完了後に読み取り phase が走るため、
+  # 書き換え系 (biome check --write / zizmor --fix) と読み取り系 (lint/typecheck/test/actionlint)
+  # が同じワークツリーで競合してレースになる事故を避ける。
   jobs:
-    - name: protect-branch
-      run: >
-        d=$(git symbolic-ref --quiet --short
-        refs/remotes/origin/HEAD 2>/dev/null|sed 's#^origin/##');
-        d=${d:-main};
-        [ $(git rev-parse --abbrev-ref HEAD) != $d ] ||
-        { echo Direct commits to $d are not allowed.&& exit 1; }
-
-    - name: ignored-files
-      run: "! git check-ignore {staged_files}"
-
-    - name: code-style
+    - name: rewrite
       group:
         piped: true
         jobs:
-          - name: format
+          - name: biome-write
+            # biome check --write は format + organizeImports + 安全な lint fix までを 1 回で適用する。
+            # 書き換え結果は stage_fixed: true で staged 領域に取り込む。
             glob: "**/*.{ts,js,mjs,json,jsonc}"
-            run: bunx biome format --write {staged_files}
+            run: bunx biome check --write {staged_files}
             stage_fixed: true
-          - name: lint
-            glob: "**/*.{ts,js,mjs,json,jsonc}"
-            run: bunx biome lint {staged_files}
-
-    - name: typecheck
-      glob: "{**/*.ts,tsconfig.json}"
-      run: bun run typecheck
-
-    - name: test
-      glob: "**/*.ts"
-      exclude: '\.d\.ts$'
-      run: bun run test
-
-    - name: ci-lint
-      group:
-        piped: true
-        jobs:
-          - name: zizmor
+          - name: zizmor-fix
             glob: '.github/{workflows/*.{yml,yaml},dependabot.yml}'
             run: zizmor --fix --pedantic --no-online-audits {staged_files}
             stage_fixed: true
+
+    - name: read-only
+      group:
+        parallel: true
+        jobs:
+          - name: protect-branch
+            run: >
+              d=$(git symbolic-ref --quiet --short
+              refs/remotes/origin/HEAD 2>/dev/null|sed 's#^origin/##');
+              d=${d:-main};
+              [ $(git rev-parse --abbrev-ref HEAD) != $d ] ||
+              { echo Direct commits to $d are not allowed.&& exit 1; }
+
+          - name: ignored-files
+            run: "! git check-ignore {staged_files}"
+
+          - name: typecheck
+            glob: "{**/*.ts,tsconfig.json}"
+            run: bun run typecheck
+
+          - name: test
+            glob: "**/*.ts"
+            exclude: '\.d\.ts$'
+            run: bun run test
+
           - name: actionlint
             glob: '.github/workflows/*.{yml,yaml}'
             run: actionlint {staged_files}
 
-    - name: lefthook-validate
-      glob: lefthook.yml
-      run: bunx lefthook validate
+          - name: lefthook-validate
+            glob: lefthook.yml
+            run: bunx lefthook validate
 
 commit-msg:
   jobs:

@@ -28,6 +28,13 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
+      - name: Check pin placeholders
+        # SHA pin 検証は他の third-party action より前に走らせ、unpinned action の実行を防ぐ。
+        # check-pins.sh は plain Bash で deps 不要のため Setup Bun より前に置ける。
+        run: |
+          set -euo pipefail
+          bash scripts/check-pins.sh
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -37,11 +44,6 @@ jobs:
         run: |
           set -euo pipefail
           bun install --frozen-lockfile --ignore-scripts
-
-      - name: Check pin placeholders
-        run: |
-          set -euo pipefail
-          bun run check-pins
 
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0

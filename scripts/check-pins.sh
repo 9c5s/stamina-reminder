@@ -42,16 +42,16 @@ SECRET_EXCLUDE=(
   ':!scripts/check-pins.sh'
   ':!scripts/check-pins.test.ts'
 )
-secret_lines=$(git grep -nE 'DISCORD_BOT_TOKEN[[:space:]]*=[[:space:]]*"?((Bot|Bearer)[[:space:]]+)?[^<[:space:]"]{20,}' \
-  -- "${SECRET_EXCLUDE[@]}" || true)
+secret_lines=$(git grep -nE 'DISCORD_BOT_TOKEN[[:space:]]*[=:][[:space:]]*"?((Bot|Bearer)[[:space:]]+)?[^<[:space:]"]{20,}' \
+  -- "${SECRET_EXCLUDE[@]}" 2>/dev/null || true)
 if [ -n "$secret_lines" ]; then
   echo "✗ Secret-like literal found (DISCORD_BOT_TOKEN not in <PLACEHOLDER> form):"
   echo "$secret_lines"
   fail=1
 fi
 
-uses_lines=$(git grep -nE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+\S+' \
-  -- '.github/workflows/*.yml' '.github/workflows/*.yaml' || true)
+uses_lines=$(git grep -nE '^[[:space:]]*-?[[:space:]]*uses:[[:space:]]+[^[:space:]]+' \
+  -- '.github/workflows/*.yml' '.github/workflows/*.yaml' 2>/dev/null || true)
 bad_lines=$(echo "$uses_lines" | awk -F'uses:[[:space:]]+' '
   NF > 1 {
     ref = $2
