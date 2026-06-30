@@ -1,0 +1,13 @@
+name = "stamina-reminder"
+main = "src/index.ts"
+compatibility_date = "2026-06-30"
+compatibility_flags = ["nodejs_compat"]
+preview_urls = false
+account_id = "b40fdc1cf09112832597f6e05f829cae"
+
+[observability]
+enabled = true
+
+[vars]
+DISCORD_APPLICATION_ID = "778087020777701416"
+DISCORD_PUBLIC_KEY = "3b53dc2bbf957c2fffa59ee933ced96e41ac9d0dfde66aeb7907a82ed81deb05"
