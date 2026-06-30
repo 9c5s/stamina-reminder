@@ -21,6 +21,8 @@ function makeTempRepo() {
   chmodSync(scriptDst, 0o755);
   // git init して staging だけ揃える
   spawnSync('git', ['init', '-q', '-b', 'main'], { cwd: dir });
+  // 開発者のグローバル設定 (commit.gpgsign=true 等) の影響を受けないようローカルで隔離する
+  spawnSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: dir });
   spawnSync('git', ['config', 'user.email', 'test@example.com'], { cwd: dir });
   spawnSync('git', ['config', 'user.name', 'test'], { cwd: dir });
   return dir;
@@ -194,6 +196,30 @@ describe('check-pins.sh', () => {
     const r = runCheckPins(dir);
     // <BOT_TOKEN> 自体は placeholder scan で検出されるが、allowlist で HANDOFF.md は除外、
     // かつ secret scan も `<` 始まりは除外するため、本ケースは exit 0
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 1 when DISCORD_BOT_TOKEN has colon-style assignment (YAML) with a real-looking literal', () => {
+    const dir = makeTempRepo();
+    // YAML や設定ファイル中で colon 区切りで誤って commit された場合も検出する
+    writeFileSync(
+      join(dir, 'config.yml'),
+      'env:\n  DISCORD_BOT_TOKEN: AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Secret-like/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 0 when DISCORD_BOT_TOKEN colon-style value is the <BOT_TOKEN> placeholder form', () => {
+    const dir = makeTempRepo();
+    // HANDOFF.md は placeholder 表記 (<>) なら secret scan で検出されない (colon 区切りでも同様)
+    writeFileSync(join(dir, 'HANDOFF.md'), 'DISCORD_BOT_TOKEN: <BOT_TOKEN>\n');
+    commitAll(dir);
+    const r = runCheckPins(dir);
     expect(r.status).toBe(0);
     rmSync(dir, { recursive: true, force: true });
   });
