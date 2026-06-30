@@ -321,6 +321,38 @@ describe('check-pins.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('exits 0 when DISCORD_BOT_TOKEN is assigned from env binding (c.env.DISCORD_BOT_TOKEN)', () => {
+    const dir = makeTempRepo();
+    // Phase 5 以降の worker 実装で c.env.DISCORD_BOT_TOKEN のような binding 参照が
+    // 通常コードに含まれるため false positive を起こさないこと
+    writeFileSync(join(dir, 'src.ts'), 'const DISCORD_BOT_TOKEN = c.env.DISCORD_BOT_TOKEN;\n');
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 0 when DISCORD_BOT_TOKEN is assigned from process.env binding', () => {
+    const dir = makeTempRepo();
+    writeFileSync(
+      join(dir, 'script.ts'),
+      'const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 0 when DISCORD_BOT_TOKEN is accessed via bracket notation (process.env["DISCORD_BOT_TOKEN"])', () => {
+    const dir = makeTempRepo();
+    writeFileSync(join(dir, 'script.ts'), 'const t = process.env["DISCORD_BOT_TOKEN"];\n');
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(0);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exits 0 when DISCORD_PUBLIC_KEY is committed as a 64-hex literal (public value, allowed)', () => {
     const dir = makeTempRepo();
     // wrangler.toml に実 64 hex の Ed25519 公開鍵を [vars] で commit するのが正式仕様 (spec §9)。

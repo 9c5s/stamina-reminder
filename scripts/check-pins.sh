@@ -44,6 +44,13 @@ SECRET_EXCLUDE=(
 )
 secret_lines=$(git grep -nE $'["\047]?DISCORD_BOT_TOKEN["\047]?[[:space:]]*[=:][[:space:]]*["\047]?((Bot|Bearer)[[:space:]]+)?[^<[:space:]"\047]{20,}' \
   -- "${SECRET_EXCLUDE[@]}" 2>/dev/null || true)
+# env binding 経由のアクセス (例: c.env.DISCORD_BOT_TOKEN, process.env.DISCORD_BOT_TOKEN,
+# process.env["DISCORD_BOT_TOKEN"]) は実 token literal ではないため検出から除外する。
+# Phase 5 以降の worker 実装で `c.env.DISCORD_BOT_TOKEN` のような binding 参照が
+# 通常コードに含まれるため false positive を防ぐ。
+if [ -n "$secret_lines" ]; then
+  secret_lines=$(echo "$secret_lines" | grep -vE $'env\\.DISCORD_BOT_TOKEN|env\\[["\047]?DISCORD_BOT_TOKEN["\047]?\\]' || true)
+fi
 if [ -n "$secret_lines" ]; then
   echo "✗ Secret-like literal found (DISCORD_BOT_TOKEN not in <PLACEHOLDER> form):"
   # 検出された token 値はログに残さず redact する。file:line までは出力して特定に困らないようにする。
