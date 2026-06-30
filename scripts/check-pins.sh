@@ -42,11 +42,12 @@ SECRET_EXCLUDE=(
   ':!scripts/check-pins.sh'
   ':!scripts/check-pins.test.ts'
 )
-secret_lines=$(git grep -nE 'DISCORD_BOT_TOKEN[[:space:]]*[=:][[:space:]]*"?((Bot|Bearer)[[:space:]]+)?[^<[:space:]"]{20,}' \
+secret_lines=$(git grep -nE '"?DISCORD_BOT_TOKEN"?[[:space:]]*[=:][[:space:]]*"?((Bot|Bearer)[[:space:]]+)?[^<[:space:]"]{20,}' \
   -- "${SECRET_EXCLUDE[@]}" 2>/dev/null || true)
 if [ -n "$secret_lines" ]; then
   echo "✗ Secret-like literal found (DISCORD_BOT_TOKEN not in <PLACEHOLDER> form):"
-  echo "$secret_lines"
+  # 検出された token 値はログに残さず redact する。file:line までは出力して特定に困らないようにする。
+  echo "$secret_lines" | sed -E 's#("?DISCORD_BOT_TOKEN"?[[:space:]]*[=:][[:space:]]*"?((Bot|Bearer)[[:space:]]+)?)[^[:space:]"]+#\1[REDACTED]#g'
   fail=1
 fi
 
