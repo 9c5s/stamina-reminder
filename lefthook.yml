@@ -35,7 +35,9 @@ pre-commit:
               { echo Direct commits to $d are not allowed.&& exit 1; }
 
           - name: ignored-files
-            run: "! git check-ignore {staged_files}"
+            # --no-index を付けないと既に index に入った force-add 済 ignored file が
+            # check-ignore に not-ignored 扱いされてすり抜けるため明示する。
+            run: "! git check-ignore --no-index {staged_files}"
 
           - name: typecheck
             # 依存更新だけの commit (package.json / bun.lock) でも typecheck を走らせる。

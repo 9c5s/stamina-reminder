@@ -253,6 +253,48 @@ describe('check-pins.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('exits 1 when DISCORD_BOT_TOKEN has single-quoted key (YAML/JS) with a real-looking literal', () => {
+    const dir = makeTempRepo();
+    // JS/YAML 等で key を single quote した形でも検出する
+    writeFileSync(
+      join(dir, 'config.js'),
+      "const env = { 'DISCORD_BOT_TOKEN': 'AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789' };\n",
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Secret-like/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 1 when workflow uses key has space before colon (uses : action@tag)', () => {
+    const dir = makeTempRepo();
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      'name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - uses : actions/checkout@v4\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Non-SHA uses/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 1 when workflow uses key is quoted ("uses": action@tag)', () => {
+    const dir = makeTempRepo();
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(
+      join(dir, '.github', 'workflows', 'ci.yml'),
+      'name: CI\non: push\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps:\n      - "uses": actions/checkout@v4\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Non-SHA uses/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exits 0 when DISCORD_PUBLIC_KEY is committed as a 64-hex literal (public value, allowed)', () => {
     const dir = makeTempRepo();
     // wrangler.toml に実 64 hex の Ed25519 公開鍵を [vars] で commit するのが正式仕様 (spec §9)。
