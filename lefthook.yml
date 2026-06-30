@@ -38,11 +38,14 @@ pre-commit:
             run: "! git check-ignore {staged_files}"
 
           - name: typecheck
-            glob: "{**/*.ts,tsconfig.json}"
+            # 依存更新だけの commit (package.json / bun.lock) でも typecheck を走らせる。
+            # 古いライブラリを参照しているコードが CI で初めて壊れるのを防ぐ。
+            glob: "{**/*.ts,tsconfig.json,package.json,bun.lock}"
             run: bun run typecheck
 
           - name: test
-            glob: "**/*.ts"
+            # test も同様、依存更新で挙動が変わる可能性があるため package.json / bun.lock を含める。
+            glob: "{**/*.ts,package.json,bun.lock}"
             exclude: '\.d\.ts$'
             run: bun run test
 
