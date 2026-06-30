@@ -48,11 +48,12 @@ secret_lines=$(git grep -nE $'["\047]?DISCORD_BOT_TOKEN["\047]?[[:space:]]*[=:][
 # process.env["DISCORD_BOT_TOKEN"]) は実 token literal ではないため検出から除外する。
 # Phase 5 以降の worker 実装で `c.env.DISCORD_BOT_TOKEN` のような binding 参照が
 # 通常コードに含まれるため false positive を防ぐ。
-# 但し RHS の先頭が env-binding identifier path で始まるケースに限定して除外する。
-# literal と env reference が同一行に混在するケース (例: { DISCORD_BOT_TOKEN: "<実 token>",
-# fallback: c.env.DISCORD_BOT_TOKEN }) では literal を見落とさない。
+# 但し RHS が **純粋な env-binding 参照のみ** に限定して除外する。env-binding に続く ?? や ||
+# で fallback literal を書くケース (env-first fallback) では literal を見落とさないよう、
+# env-binding pattern の後に許容するのは whitespace と `;` / `,` / `)` / `]` / `}` などの
+# statement 終端記号のみ。RHS 末尾に行末アンカー (`$`) を置くことで強制する。
 if [ -n "$secret_lines" ]; then
-  secret_lines=$(echo "$secret_lines" | grep -vE $'DISCORD_BOT_TOKEN["\047]?[[:space:]]*[=:][[:space:]]*([a-zA-Z_][a-zA-Z0-9_$]*\\.)*env(\\.|\\[["\047]?)DISCORD_BOT_TOKEN' || true)
+  secret_lines=$(echo "$secret_lines" | grep -vE $'DISCORD_BOT_TOKEN["\047]?[[:space:]]*[=:][[:space:]]*([a-zA-Z_][a-zA-Z0-9_$]*\\.)*env(\\.DISCORD_BOT_TOKEN|\\[["\047]?DISCORD_BOT_TOKEN["\047]?\\])[[:space:]]*[];,)}]*[[:space:]]*$' || true)
 fi
 if [ -n "$secret_lines" ]; then
   echo "✗ Secret-like literal found (DISCORD_BOT_TOKEN not in <PLACEHOLDER> form):"

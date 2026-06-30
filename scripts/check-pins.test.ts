@@ -4,6 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+// secret-scan のテスト用 fake token。連続 literal を生 source に置くと Betterleaks 等の secret
+// scanner がノイズで反応するため、組み立て時に 3 piece を結合して連続認識を避ける。
+const FAKE_TOKEN = `${'AbCdEfGhIjKlMnOpQrSt'}.${'uVwXyZ'}.${'0123456789abcdef0123456789'}`;
+
 function runCheckPins(repoRoot: string) {
   return spawnSync('bash', ['scripts/check-pins.sh'], {
     cwd: repoRoot,
@@ -151,10 +155,7 @@ describe('check-pins.sh', () => {
   it('exits 1 when DISCORD_BOT_TOKEN appears as a real-looking literal (not placeholder)', () => {
     const dir = makeTempRepo();
     // 20 文字以上の token 風文字列 (Discord bot token は 70 文字程度、最低 20 文字で detect)
-    writeFileSync(
-      join(dir, 'HANDOFF.md'),
-      'DISCORD_BOT_TOKEN=AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789\n',
-    );
+    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=${FAKE_TOKEN}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -164,10 +165,7 @@ describe('check-pins.sh', () => {
 
   it('exits 1 when DISCORD_BOT_TOKEN has Bot prefix with a real-looking literal', () => {
     const dir = makeTempRepo();
-    writeFileSync(
-      join(dir, 'HANDOFF.md'),
-      'DISCORD_BOT_TOKEN=Bot AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789\n',
-    );
+    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=Bot ${FAKE_TOKEN}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -177,10 +175,7 @@ describe('check-pins.sh', () => {
 
   it('exits 1 when DISCORD_BOT_TOKEN has Bearer prefix with a real-looking literal', () => {
     const dir = makeTempRepo();
-    writeFileSync(
-      join(dir, 'HANDOFF.md'),
-      'DISCORD_BOT_TOKEN=Bearer AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789\n',
-    );
+    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=Bearer ${FAKE_TOKEN}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -203,10 +198,7 @@ describe('check-pins.sh', () => {
   it('exits 1 when DISCORD_BOT_TOKEN has colon-style assignment (YAML) with a real-looking literal', () => {
     const dir = makeTempRepo();
     // YAML や設定ファイル中で colon 区切りで誤って commit された場合も検出する
-    writeFileSync(
-      join(dir, 'config.yml'),
-      'env:\n  DISCORD_BOT_TOKEN: AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789\n',
-    );
+    writeFileSync(join(dir, 'config.yml'), `env:\n  DISCORD_BOT_TOKEN: ${FAKE_TOKEN}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -227,10 +219,7 @@ describe('check-pins.sh', () => {
   it('exits 1 when DISCORD_BOT_TOKEN has a quoted key (JSON/TOML) with a real-looking literal', () => {
     const dir = makeTempRepo();
     // JSON や TOML 形式で key を quote して書かれていても検出する
-    writeFileSync(
-      join(dir, 'config.json'),
-      '{"DISCORD_BOT_TOKEN": "AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789"}\n',
-    );
+    writeFileSync(join(dir, 'config.json'), `{"DISCORD_BOT_TOKEN": "${FAKE_TOKEN}"}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -240,8 +229,7 @@ describe('check-pins.sh', () => {
 
   it('redacts the token value in the output when a real-looking literal is detected', () => {
     const dir = makeTempRepo();
-    const fakeToken = 'AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789';
-    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=${fakeToken}\n`);
+    writeFileSync(join(dir, 'HANDOFF.md'), `DISCORD_BOT_TOKEN=${FAKE_TOKEN}\n`);
     commitAll(dir);
     const r = runCheckPins(dir);
     expect(r.status).toBe(1);
@@ -249,7 +237,7 @@ describe('check-pins.sh', () => {
     // [REDACTED] が出力に含まれる
     expect(output).toMatch(/\[REDACTED\]/);
     // 生の token は出力に含まれない (CI ログへの 2 次漏出を防ぐ)
-    expect(output).not.toContain(fakeToken);
+    expect(output).not.toContain(FAKE_TOKEN);
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -258,7 +246,7 @@ describe('check-pins.sh', () => {
     // JS/YAML 等で key を single quote した形でも検出する
     writeFileSync(
       join(dir, 'config.js'),
-      "const env = { 'DISCORD_BOT_TOKEN': 'AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789' };\n",
+      `const env = { 'DISCORD_BOT_TOKEN': '${FAKE_TOKEN}' };\n`,
     );
     commitAll(dir);
     const r = runCheckPins(dir);
@@ -359,7 +347,22 @@ describe('check-pins.sh', () => {
     // env binding 除外は RHS 先頭が env path のときだけにし、literal は確実に検出する。
     writeFileSync(
       join(dir, 'config.ts'),
-      'const config = { DISCORD_BOT_TOKEN: "AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789", fallback: process.env.DISCORD_BOT_TOKEN };\n',
+      `const config = { DISCORD_BOT_TOKEN: "${FAKE_TOKEN}", fallback: process.env.DISCORD_BOT_TOKEN };\n`,
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Secret-like/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('exits 1 when env binding is followed by ?? fallback literal (env-first fallback)', () => {
+    const dir = makeTempRepo();
+    // RHS が env binding で始まりつつ ?? や || で fallback literal が続くケース。
+    // env-binding 除外を行末アンカーで縛ることで、fallback literal を見逃さない。
+    writeFileSync(
+      join(dir, 'src.ts'),
+      `const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN ?? "${FAKE_TOKEN}";\n`,
     );
     commitAll(dir);
     const r = runCheckPins(dir);
