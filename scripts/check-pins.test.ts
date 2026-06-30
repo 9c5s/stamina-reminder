@@ -353,6 +353,21 @@ describe('check-pins.sh', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('exits 1 when literal token and env binding are on the same line (literal first)', () => {
+    const dir = makeTempRepo();
+    // RHS が literal token で、別の field が env binding 参照を持つケース。
+    // env binding 除外は RHS 先頭が env path のときだけにし、literal は確実に検出する。
+    writeFileSync(
+      join(dir, 'config.ts'),
+      'const config = { DISCORD_BOT_TOKEN: "AbCdEfGhIjKlMnOpQrSt.uVwXyZ.0123456789abcdef0123456789", fallback: process.env.DISCORD_BOT_TOKEN };\n',
+    );
+    commitAll(dir);
+    const r = runCheckPins(dir);
+    expect(r.status).toBe(1);
+    expect(r.stdout + r.stderr).toMatch(/Secret-like/);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('exits 0 when DISCORD_PUBLIC_KEY is committed as a 64-hex literal (public value, allowed)', () => {
     const dir = makeTempRepo();
     // wrangler.toml に実 64 hex の Ed25519 公開鍵を [vars] で commit するのが正式仕様 (spec §9)。
