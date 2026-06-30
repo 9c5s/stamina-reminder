@@ -61,6 +61,9 @@ bad_lines=$(echo "$uses_lines" | awk $'
     if (match(line, /["\047]?uses["\047]?[[:space:]]*:[[:space:]]+/)) {
       ref = substr(line, RSTART + RLENGTH)
       sub(/[[:space:]].*$/, "", ref)
+      # ref を quote した形 (uses: "actions/foo@<sha>") も valid YAML なので外側 quote を剥がす
+      sub(/^["\047]/, "", ref)
+      sub(/["\047]$/, "", ref)
       if (ref ~ /^\\.\\.?\\//) next
       if (ref !~ /@[0-9a-f]{40}$/) {
         print line
