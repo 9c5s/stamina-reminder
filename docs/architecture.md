@@ -62,7 +62,7 @@ Discord                              Cloudflare
 | `/stamina add` | `title:string` `current:integer` | 現在スタミナを記録、満タン時刻を計算して setAlarm |
 | `/stamina list` | (なし) | 自分の登録中スタミナ一覧 (満タン時刻付き) |
 | `/stamina cancel` | `title:string` | 指定タイトルのスケジュールを取り消し |
-| `/title add` | `name:string` `max:integer` `regen_seconds:integer` | タイトルマスタを KV に登録 |
+| `/title add` | `name:string` `max:integer` `regen_minutes:integer` | タイトルマスタを KV に登録 (内部は秒に変換して保持) |
 | `/title list` | (なし) | KV のタイトルマスタ一覧 |
 | `/title remove` | `name:string` | KV からタイトル削除 |
 
@@ -72,7 +72,7 @@ Discord                              Cloudflare
 
 ### KV (TITLES) - タイトルマスタ
 - key: `title:<name>` (例: `title:プリコネ`)
-- value: JSON `{ "name": "プリコネ", "max": 99, "regen_seconds_per_point": 360 }`
+- value: JSON `{ "name": "プリコネ", "max": 99, "regen_minutes_per_point": 6 }`
 - 読み: スタミナ登録時 / list 時
 - 書き: `/title add`, `/title remove` 時
 
@@ -302,12 +302,12 @@ export async function handleTitle(c: Context<{ Bindings: Bindings }>, interactio
     case 'add': {
       const name = opts.name as string;
       const max = opts.max as number;
-      const regen = opts.regen_seconds as number;
+      const regen = opts.regen_minutes as number;
       await c.env.TITLES.put(
         `title:${name}`,
-        JSON.stringify({ name, max, regen_seconds_per_point: regen }),
+        JSON.stringify({ name, max, regen_minutes_per_point: regen }),
       );
-      return ok(c, `${name} を登録 (max=${max}, regen=${regen}s/pt)`);
+      return ok(c, `${name} を登録 (max=${max}, regen=${regen}min/pt)`);
     }
     case 'list': {
       const list = await c.env.TITLES.list({ prefix: 'title:' });
@@ -317,7 +317,7 @@ export async function handleTitle(c: Context<{ Bindings: Bindings }>, interactio
         const raw = await c.env.TITLES.get(k.name);
         if (raw) {
           const t = JSON.parse(raw);
-          lines.push(`- ${t.name}: max=${t.max}, regen=${t.regen_seconds_per_point}s/pt`);
+          lines.push(`- ${t.name}: max=${t.max}, regen=${t.regen_minutes_per_point}min/pt`);
         }
       }
       return ok(c, lines.join('\n'));
@@ -350,7 +350,7 @@ import type { Bindings } from '../index';
 interface TitleMaster {
   name: string;
   max: number;
-  regen_seconds_per_point: number;
+  regen_minutes_per_point: number;
 }
 
 export class UserState implements DurableObject {
@@ -412,7 +412,7 @@ export class UserState implements DurableObject {
     if (current >= t.max) return new Response(`${title} は既に満タン`);
 
     const remain = t.max - current;
-    const fullAtMs = Date.now() + remain * t.regen_seconds_per_point * 1000;
+    const fullAtMs = Date.now() + remain * t.regen_minutes_per_point * 60 * 1000;
 
     this.sql.exec(
       `INSERT OR REPLACE INTO stamina
@@ -542,7 +542,7 @@ export const commands = [
         options: [
           { name: 'name', description: 'タイトル名', type: 3, required: true },
           { name: 'max', description: '最大スタミナ', type: 4, required: true },
-          { name: 'regen_seconds', description: '1ポイント回復に必要な秒数', type: 4, required: true },
+          { name: 'regen_minutes', description: '1ポイント回復に必要な分数', type: 4, required: true },
         ],
       },
       { name: 'list', description: 'タイトル一覧', type: 1 },

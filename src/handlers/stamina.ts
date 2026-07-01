@@ -44,7 +44,7 @@ export async function handleStamina(
   }
 
   // /stamina add はタイトルマスターを handler 層で解決し DO の外部 await を排除して race を防止する
-  let titleMaster: { max: number; regen_seconds_per_point: number } | undefined;
+  let titleMaster: { max: number; regen_minutes_per_point: number } | undefined;
   // ハンドラ層で採取した登録時刻を DO に渡し、古いリクエストを UPSERT の WHERE 節で弾く
   let registeredAtMs: number | undefined;
   // ハンドラ層で採取したキャンセル時刻を DO に渡し、tombstone と DELETE の時刻基準を add と対称にする
@@ -56,7 +56,7 @@ export async function handleStamina(
     if (!t) {
       return ephemeral(c, `未登録のタイトル: ${titleVal} (先に /title add で登録して)`);
     }
-    titleMaster = { max: t.max, regen_seconds_per_point: t.regen_seconds_per_point };
+    titleMaster = { max: t.max, regen_minutes_per_point: t.regen_minutes_per_point };
   }
   if (sub.name === 'cancel') {
     // interaction 到着時刻を DO に渡し、add と同一の基準でキャンセルの前後関係を判定できるようにする
