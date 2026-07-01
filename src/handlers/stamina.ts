@@ -32,6 +32,10 @@ export async function handleStamina(
     const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
     if (titleOpt) {
       const titleVal = String(titleOpt.value ?? '').trim();
+      // add は空白のみのタイトルを /title add と対称なエラーで弾く
+      if (sub.name === 'add' && !titleVal) {
+        return ephemeral(c, 'タイトル名は必須です');
+      }
       const titleBytes = new TextEncoder().encode(titleVal).length;
       if (titleBytes > 490) {
         return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
