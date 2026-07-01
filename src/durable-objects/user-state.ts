@@ -194,7 +194,7 @@ export class UserState extends DurableObject<Bindings> {
       } catch (err) {
         // ネットワークエラー (AbortSignal.timeout 等) が発生した場合は自前で再スケジュールして復帰する
         console.log(`network error for ${r.title_name}: ${err}, rescheduling in 60s`);
-        await this.scheduleRetry(60_000);
+        await this.scheduleRetry(60_000, r.title_name);
         return;
       }
       if (!resp.ok) {
@@ -210,7 +210,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
           );
-          await this.scheduleRetry(retryMs);
+          await this.scheduleRetry(retryMs, r.title_name);
           return;
         }
         // 回復可能な認証/権限エラー: トークンローテーション中やボット権限設定中は行を保持して再スケジュールする
@@ -219,7 +219,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
           );
-          await this.scheduleRetry(fallbackMs);
+          await this.scheduleRetry(fallbackMs, r.title_name);
           return;
         }
         // 真に永続的なクライアントエラー (400/404 等): チャンネル削除や不正ペイロードのため行を削除して続行
@@ -239,7 +239,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
           );
-          await this.scheduleRetry(fallbackMs);
+          await this.scheduleRetry(fallbackMs, r.title_name);
           return;
         }
       }
@@ -259,14 +259,23 @@ export class UserState extends DurableObject<Bindings> {
    * リトライ用アラームをスケジュールする。
    * DO の alarm スロットは 1 つのみのため、既存の pending 行の最小 full_at_ms と比較し、
    * 早い方をセットすることで無関係なリマインダーの遅延を防ぐ。
+   * excludeTitle を指定すると、その行を MIN 集計から除外する。
+   * 失敗した due 行自体は過去時刻のため、除外しないと Math.min が即時再発火を選んでしまう。
    */
-  private async scheduleRetry(retryMs: number): Promise<void> {
+  private async scheduleRetry(retryMs: number, excludeTitle?: string): Promise<void> {
     const retryAt = Date.now() + retryMs;
-    const rows = [
-      ...this.sql.exec<{ next_at: number | null }>(
-        `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
-      ),
-    ];
+    const rows = excludeTitle
+      ? [
+          ...this.sql.exec<{ next_at: number | null }>(
+            `SELECT MIN(full_at_ms) AS next_at FROM stamina WHERE title_name != ?`,
+            excludeTitle,
+          ),
+        ]
+      : [
+          ...this.sql.exec<{ next_at: number | null }>(
+            `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
+          ),
+        ];
     const nextPending = rows[0]?.next_at ?? null;
     const target = nextPending !== null ? Math.min(retryAt, nextPending) : retryAt;
     await this.ctx.storage.setAlarm(target);
