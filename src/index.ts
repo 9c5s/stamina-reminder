@@ -3,6 +3,9 @@ import { Hono } from 'hono';
 import { dispatchInteraction, type Interaction } from './interactions';
 
 export type Bindings = {
+  USER_STATE: DurableObjectNamespace;
+  TITLES: KVNamespace;
+  DISCORD_BOT_TOKEN: string;
   DISCORD_APPLICATION_ID: string;
   DISCORD_PUBLIC_KEY: string;
 };
