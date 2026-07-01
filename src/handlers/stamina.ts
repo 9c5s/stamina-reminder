@@ -1,7 +1,7 @@
-import { InteractionResponseType } from 'discord-interactions';
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { getTitle } from '../lib/titles';
+import { ephemeral } from './ephemeral';
 
 interface Interaction {
   data?: {
@@ -78,15 +78,5 @@ export async function handleStamina(
     return ephemeral(c, '処理中にエラーが発生しました');
   }
   const body = await resp.text();
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { content: body, flags: 64 },
-  });
-}
-
-function ephemeral(c: Context, msg: string) {
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { content: msg, flags: 64 },
-  });
+  return ephemeral(c, body);
 }
