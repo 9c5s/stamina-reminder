@@ -89,6 +89,12 @@ export class UserState extends DurableObject<Bindings> {
     titleMaster: { max: number; regen_seconds_per_point: number },
     registeredAtMs: number,
   ): Promise<Response> {
+    // cancel 後に古い add が到着してもゾンビ復活しないよう tombstone を照合する
+    const cancelledAt = await this.ctx.storage.get<number>(`cancel:${title}`);
+    if (typeof cancelledAt === 'number' && cancelledAt >= registeredAtMs) {
+      return new Response(`${title} はキャンセル済みのため無視しました`);
+    }
+
     // titleMaster は handler 層で解決済みのため DO 内に外部 await が存在せず、並行 add による競合を防止できる
     const t = titleMaster;
     const nowMs = Date.now();
@@ -173,6 +179,8 @@ export class UserState extends DurableObject<Bindings> {
 
   private async cancel(title: string): Promise<Response> {
     this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, title);
+    // tombstone を保持し、キャンセル後に古い add が到着しても再挿入されないようにする
+    await this.ctx.storage.put(`cancel:${title}`, Date.now());
     await this.refreshAlarm();
     return new Response(`${title} をキャンセル`);
   }
