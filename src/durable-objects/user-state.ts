@@ -99,8 +99,13 @@ export class UserState extends DurableObject<Bindings> {
       nowMs,
     });
     if (fullAtMs === null) {
-      // 既に満タンの場合、古いアラーム行が残っていれば削除してアラームを更新する
-      this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, title);
+      // 既に満タンの場合、自分の registered_at_ms 以下の行のみ削除してアラームを更新する
+      // registered_at_ms > registeredAtMs の行 (より新しい登録) は保護する
+      this.sql.exec(
+        `DELETE FROM stamina WHERE title_name = ? AND registered_at_ms <= ?`,
+        title,
+        registeredAtMs,
+      );
       await this.refreshAlarm();
       return new Response(`${title} は既に満タン`);
     }
