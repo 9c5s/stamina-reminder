@@ -139,6 +139,7 @@ export class UserState extends DurableObject<Bindings> {
         botToken: this.env.DISCORD_BOT_TOKEN,
         channelId: r.channel_id,
         content: `<@${userId}> ${r.title_name} のスタミナが満タンになった`,
+        mentionUserId: userId,
       });
       if (!resp.ok) {
         if (resp.status === 429) {
