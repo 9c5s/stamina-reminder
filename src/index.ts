@@ -2,7 +2,7 @@ import { InteractionResponseType, verifyKey } from 'discord-interactions';
 import { Hono } from 'hono';
 import { handleStamina } from './handlers/stamina';
 import { handleTitle } from './handlers/title';
-import { dispatchInteraction } from './interactions';
+import { dispatchInteraction, type Interaction } from './interactions';
 
 export { UserState } from './durable-objects/user-state';
 
@@ -26,7 +26,7 @@ app.post('/interactions', async (c) => {
     return c.text('invalid signature', 401);
   }
 
-  const interaction = JSON.parse(body);
+  const interaction = JSON.parse(body) as Interaction;
   const result = dispatchInteraction(interaction);
 
   if (result.kind === 'pong') {

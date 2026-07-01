@@ -1,6 +1,12 @@
 export type Interaction = {
   type: number;
-  data?: { name?: string; [key: string]: any };
+  data?: {
+    name?: string;
+    options?: { name: string; options?: { name: string; value: string | number }[] }[];
+  };
+  member?: { user?: { id: string } };
+  user?: { id: string };
+  channel_id?: string;
 };
 
 export type DispatchResult =
