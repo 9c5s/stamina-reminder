@@ -145,8 +145,9 @@ export class UserState extends DurableObject<Bindings> {
     }
 
     await this.refreshAlarm();
-    const at = new Date(fullAtMs).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-    return new Response(`${title}: ${current}/${t.max} 登録、満タン予定 ${at}`);
+    return new Response(
+      `${title}: ${current}/${t.max} 登録、満タン予定 ${this.formatJst(fullAtMs)}`,
+    );
   }
 
   private async list(): Promise<Response> {
@@ -157,8 +158,7 @@ export class UserState extends DurableObject<Bindings> {
     ];
     if (!rows.length) return new Response('登録なし');
     const lines = rows.map(
-      (r) =>
-        `- ${r.title_name}: 現在 ${r.current} -> 満タン ${new Date(r.full_at_ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`,
+      (r) => `- ${r.title_name}: 現在 ${r.current} -> 満タン ${this.formatJst(r.full_at_ms)}`,
     );
     // Discord のメッセージ上限 2000 字に対し 1900 字でキャップし、省略件数を末尾に付加する
     const LIMIT = 1900;
@@ -275,6 +275,11 @@ export class UserState extends DurableObject<Bindings> {
     }
 
     await this.refreshAlarm();
+  }
+
+  /** ミリ秒タイムスタンプを JST の日時文字列に変換する */
+  private formatJst(ms: number): string {
+    return new Date(ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
   }
 
   /**
