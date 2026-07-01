@@ -1,7 +1,7 @@
 export interface TitleMaster {
   name: string;
   max: number;
-  regen_seconds_per_point: number;
+  regen_minutes_per_point: number;
 }
 
 export const KEY_PREFIX = 'title:';

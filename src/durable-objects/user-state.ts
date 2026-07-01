@@ -17,7 +17,7 @@ interface DispatchPayload {
   options: { name: string; value: string | number }[];
   channel_id: string;
   /** add サブコマンド用: handler 層で解決済みのタイトルマスター */
-  title_master?: { max: number; regen_seconds_per_point: number };
+  title_master?: { max: number; regen_minutes_per_point: number };
   /** add サブコマンド用: ハンドラ層で採取した登録時刻 (競合判定に使用、add 時必須) */
   registered_at_ms?: number;
   /** cancel サブコマンド用: ハンドラ層で採取したキャンセル時刻 (tombstone と DELETE の時刻基準) */
@@ -89,7 +89,7 @@ export class UserState extends DurableObject<Bindings> {
     title: string,
     current: number,
     channelId: string,
-    titleMaster: { max: number; regen_seconds_per_point: number },
+    titleMaster: { max: number; regen_minutes_per_point: number },
     registeredAtMs: number,
   ): Promise<Response> {
     // cancel 後に古い add が到着してもゾンビ復活しないよう tombstone を照合する
@@ -102,10 +102,11 @@ export class UserState extends DurableObject<Bindings> {
     const t = titleMaster;
     // nowMs に registered_at_ms を使い、interaction 到着時刻を満タン計算の起点にする
     // DO 処理遅延分がずれを生じさせないよう、handler 採取時刻を一貫して使う
+    // タイトルマスターは分単位で保持されているため calculateFullAtMs 呼び出し時に秒へ換算する
     const fullAtMs = calculateFullAtMs({
       current,
       max: t.max,
-      regenSecondsPerPoint: t.regen_seconds_per_point,
+      regenSecondsPerPoint: t.regen_minutes_per_point * 60,
       nowMs: registeredAtMs,
     });
     if (fullAtMs === null) {

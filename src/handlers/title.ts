@@ -35,19 +35,19 @@ export async function handleTitle(
       if (max > 100000) {
         return ephemeral(c, '最大スタミナは 100000 以下で指定してください');
       }
-      const regen = Number(opts.regen_seconds);
-      if (!Number.isFinite(regen) || regen <= 0) {
-        return ephemeral(c, '回復秒数は1以上の数値を指定してください');
+      const regenMinutes = Number(opts.regen_minutes);
+      if (!Number.isFinite(regenMinutes) || regenMinutes <= 0) {
+        return ephemeral(c, '回復分数は1以上の数値を指定してください');
       }
-      if (regen > 86400) {
-        return ephemeral(c, '回復秒数は 86400 以下 (1 日) で指定してください');
+      if (regenMinutes > 1440) {
+        return ephemeral(c, '回復分数は 1440 以下 (1 日) で指定してください');
       }
       await putTitle(c.env.TITLES, {
         name,
         max,
-        regen_seconds_per_point: regen,
+        regen_minutes_per_point: regenMinutes,
       });
-      return ephemeral(c, `${name} を登録 (max=${max}, regen=${regen}s/pt)`);
+      return ephemeral(c, `${name} を登録 (max=${max}, regen=${regenMinutes}min/pt)`);
     }
     case 'list': {
       const list = await c.env.TITLES.list({ prefix: KEY_PREFIX });
@@ -63,7 +63,7 @@ export async function handleTitle(
         const raw = await c.env.TITLES.get(k.name);
         if (!raw) continue;
         const t = JSON.parse(raw) as TitleMaster;
-        const line = `- ${t.name}: max=${t.max}, regen=${t.regen_seconds_per_point}s/pt`;
+        const line = `- ${t.name}: max=${t.max}, regen=${t.regen_minutes_per_point}min/pt`;
         const nextLen = content.length + (content ? 1 : 0) + line.length;
         if (nextLen > LIMIT - SUFFIX_RESERVE) break;
         content = content ? `${content}\n${line}` : line;
