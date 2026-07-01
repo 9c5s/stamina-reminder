@@ -4,7 +4,7 @@ import {
   InteractionType,
 } from 'discord-interactions';
 
-type Interaction = {
+export type Interaction = {
   type: number;
   data?: { name?: string };
 };

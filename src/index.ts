@@ -1,6 +1,6 @@
 import { verifyKey } from 'discord-interactions';
 import { Hono } from 'hono';
-import { dispatchInteraction } from './interactions';
+import { dispatchInteraction, type Interaction } from './interactions';
 
 export type Bindings = {
   DISCORD_APPLICATION_ID: string;
@@ -19,7 +19,7 @@ app.post('/interactions', async (c) => {
     return c.text('invalid signature', 401);
   }
 
-  const interaction = JSON.parse(body) as { type: number; data?: { name?: string } };
+  const interaction = JSON.parse(body) as Interaction;
   const response = dispatchInteraction(interaction);
   return c.json(response);
 });
