@@ -21,9 +21,16 @@ export async function handleTitle(
 
   switch (sub.name) {
     case 'add': {
-      const name = String(opts.name);
+      const name = String(opts.name ?? '').trim();
+      if (!name) return ephemeral(c, 'タイトル名は必須です');
       const max = Number(opts.max);
+      if (!Number.isFinite(max) || max <= 0) {
+        return ephemeral(c, '最大スタミナは1以上の数値を指定してください');
+      }
       const regen = Number(opts.regen_seconds);
+      if (!Number.isFinite(regen) || regen <= 0) {
+        return ephemeral(c, '回復秒数は1以上の数値を指定してください');
+      }
       await putTitle(c.env.TITLES, {
         name,
         max,
@@ -40,7 +47,8 @@ export async function handleTitle(
       return ephemeral(c, lines.join('\n'));
     }
     case 'remove': {
-      const name = String(opts.name);
+      const name = String(opts.name ?? '').trim();
+      if (!name) return ephemeral(c, 'タイトル名は必須です');
       await deleteTitle(c.env.TITLES, name);
       return ephemeral(c, `${name} を削除`);
     }
