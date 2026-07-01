@@ -2,27 +2,37 @@ import { describe, expect, it } from 'vitest';
 import { dispatchInteraction } from './interactions';
 
 describe('dispatchInteraction', () => {
-  it('returns PONG for PING interaction', () => {
+  it('returns pong for PING interaction', () => {
     const result = dispatchInteraction({ type: 1 });
-    expect(result).toEqual({ type: 1 });
+    expect(result).toEqual({ kind: 'pong' });
   });
 
-  it('returns ephemeral fallback for unknown application command', () => {
+  it('routes /stamina to stamina handler', () => {
     const result = dispatchInteraction({
       type: 2,
-      data: { name: 'unknown' },
+      data: { name: 'stamina', options: [{ name: 'list', options: [] }] },
     });
-    expect(result).toEqual({
-      type: 4,
-      data: { content: '未対応のコマンド', flags: 64 },
-    });
+    expect(result).toEqual({ kind: 'route', name: 'stamina' });
   });
 
-  it('returns ephemeral fallback for unknown interaction type', () => {
-    const result = dispatchInteraction({ type: 99 });
-    expect(result).toEqual({
-      type: 4,
-      data: { content: '未対応のコマンド', flags: 64 },
+  it('routes /title to title handler', () => {
+    const result = dispatchInteraction({
+      type: 2,
+      data: { name: 'title', options: [{ name: 'list', options: [] }] },
     });
+    expect(result).toEqual({ kind: 'route', name: 'title' });
+  });
+
+  it('returns unknown for application command with unknown name', () => {
+    const result = dispatchInteraction({
+      type: 2,
+      data: { name: 'mystery' },
+    });
+    expect(result).toEqual({ kind: 'unknown' });
+  });
+
+  it('returns unknown for unsupported interaction type', () => {
+    const result = dispatchInteraction({ type: 99 });
+    expect(result).toEqual({ kind: 'unknown' });
   });
 });
