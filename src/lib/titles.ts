@@ -21,10 +21,9 @@ export async function deleteTitle(kv: KVNamespace, name: string): Promise<void> 
 
 export async function listTitles(kv: KVNamespace): Promise<TitleMaster[]> {
   const list = await kv.list({ prefix: KEY_PREFIX });
-  const titles: TitleMaster[] = [];
-  for (const k of list.keys) {
-    const raw = await kv.get(k.name);
-    if (raw) titles.push(JSON.parse(raw) as TitleMaster);
-  }
-  return titles;
+  // 逐次 await ではなく Promise.all で並列フェッチし、レイテンシを削減する
+  const raws = await Promise.all(list.keys.map((k) => kv.get(k.name)));
+  return raws
+    .map((raw) => (raw ? (JSON.parse(raw) as TitleMaster) : null))
+    .filter((t): t is TitleMaster => t !== null);
 }
