@@ -33,8 +33,16 @@ app.post('/interactions', async (c) => {
     return c.json({ type: 1 });
   }
   if (result.kind === 'route') {
-    if (result.name === 'stamina') return handleStamina(c, interaction);
-    if (result.name === 'title') return handleTitle(c, interaction);
+    try {
+      if (result.name === 'stamina') return await handleStamina(c, interaction);
+      if (result.name === 'title') return await handleTitle(c, interaction);
+    } catch (e) {
+      console.error('handler failed', e);
+      return c.json({
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: '処理中にエラーが発生しました', flags: 64 },
+      });
+    }
   }
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
