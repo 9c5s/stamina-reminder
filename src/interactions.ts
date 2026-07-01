@@ -1,3 +1,5 @@
+import { InteractionType } from 'discord-interactions';
+
 export type Interaction = {
   type: number;
   data?: {
@@ -17,10 +19,10 @@ export type DispatchResult =
   | { kind: 'unknown' };
 
 export function dispatchInteraction(interaction: Interaction): DispatchResult {
-  if (interaction.type === 1) {
+  if (interaction.type === InteractionType.PING) {
     return { kind: 'pong' };
   }
-  if (interaction.type === 2) {
+  if (interaction.type === InteractionType.APPLICATION_COMMAND) {
     const name = interaction.data?.name;
     if (name === 'stamina' || name === 'title') {
       return { kind: 'route', name };

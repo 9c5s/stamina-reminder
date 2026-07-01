@@ -30,7 +30,7 @@ app.post('/interactions', async (c) => {
   const result = dispatchInteraction(interaction);
 
   if (result.kind === 'pong') {
-    return c.json({ type: 1 });
+    return c.json({ type: InteractionResponseType.PONG });
   }
   if (result.kind === 'route') {
     try {
