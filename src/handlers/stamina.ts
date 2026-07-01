@@ -18,7 +18,11 @@ export async function handleStamina(
   const sub = interaction.data?.options?.[0];
   if (!sub) return ephemeral(c, 'サブコマンド指定なし');
 
-  const userId = interaction.member?.user?.id ?? interaction.user?.id ?? 'anon';
+  const userId = interaction.member?.user?.id ?? interaction.user?.id;
+  const channelId = interaction.channel_id;
+  if (!userId || !channelId) {
+    return ephemeral(c, '不正な interaction: user_id または channel_id 欠落');
+  }
   const stub = c.env.USER_STATE.get(c.env.USER_STATE.idFromName(userId));
 
   const resp = await stub.fetch(
@@ -28,7 +32,7 @@ export async function handleStamina(
       body: JSON.stringify({
         sub_name: sub.name,
         options: sub.options ?? [],
-        channel_id: interaction.channel_id ?? '',
+        channel_id: channelId,
       }),
     }),
   );
