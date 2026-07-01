@@ -3,7 +3,6 @@ import type { Bindings } from '../index';
 import { postChannelMessage } from '../lib/discord-rest';
 import { optionsToRecord } from '../lib/options';
 import { calculateFullAtMs } from '../lib/stamina-calc';
-import { getTitle } from '../lib/titles';
 
 interface StaminaRow {
   title_name: string;
@@ -17,6 +16,8 @@ interface DispatchPayload {
   sub_name: 'add' | 'list' | 'cancel';
   options: { name: string; value: string | number }[];
   channel_id: string;
+  /** add サブコマンド用: handler 層で解決済みのタイトルマスター */
+  title_master?: { max: number; regen_seconds_per_point: number };
 }
 
 export class UserState extends DurableObject<Bindings> {
@@ -56,7 +57,9 @@ export class UserState extends DurableObject<Bindings> {
         if (!Number.isFinite(current) || current < 0) {
           return new Response('現在のスタミナは0以上の数値を指定してください');
         }
-        return this.add(title, current, payload.channel_id);
+        // title_master は handler 層で KV から解決済みのため DO 内で外部 await 不要
+        if (!payload.title_master) return new Response('title_master が未指定です');
+        return this.add(title, current, payload.channel_id, payload.title_master);
       }
       case 'list':
         return this.list();
@@ -69,11 +72,14 @@ export class UserState extends DurableObject<Bindings> {
     return new Response('未対応のサブコマンド');
   }
 
-  private async add(title: string, current: number, channelId: string): Promise<Response> {
-    const t = await getTitle(this.env.TITLES, title);
-    if (!t) {
-      return new Response(`未登録のタイトル: ${title} (先に /title add で登録して)`);
-    }
+  private async add(
+    title: string,
+    current: number,
+    channelId: string,
+    titleMaster: { max: number; regen_seconds_per_point: number },
+  ): Promise<Response> {
+    // titleMaster は handler 層で解決済みのため DO 内に外部 await が存在せず、並行 add による競合を防止できる
+    const t = titleMaster;
     const nowMs = Date.now();
     const fullAtMs = calculateFullAtMs({
       current,

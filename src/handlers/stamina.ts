@@ -1,6 +1,7 @@
 import { InteractionResponseType } from 'discord-interactions';
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
+import { getTitle } from '../lib/titles';
 
 interface Interaction {
   data?: {
@@ -38,6 +39,18 @@ export async function handleStamina(
     }
   }
 
+  // /stamina add はタイトルマスターを handler 層で解決し DO の外部 await を排除して race を防止する
+  let titleMaster: { max: number; regen_seconds_per_point: number } | undefined;
+  if (sub.name === 'add') {
+    const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
+    const titleVal = String(titleOpt?.value ?? '').trim();
+    const t = await getTitle(c.env.TITLES, titleVal);
+    if (!t) {
+      return ephemeral(c, `未登録のタイトル: ${titleVal} (先に /title add で登録して)`);
+    }
+    titleMaster = { max: t.max, regen_seconds_per_point: t.regen_seconds_per_point };
+  }
+
   const stub = c.env.USER_STATE.get(c.env.USER_STATE.idFromName(userId));
 
   const resp = await stub.fetch(
@@ -48,6 +61,7 @@ export async function handleStamina(
         sub_name: sub.name,
         options: sub.options ?? [],
         channel_id: channelId,
+        ...(titleMaster ? { title_master: titleMaster } : {}),
       }),
     }),
   );
