@@ -76,6 +76,14 @@ describe('isValidTitleMaster', () => {
     );
   });
 
+  it('rejects a name whose character count exceeds NAME_MAX_CHARS', () => {
+    // 100 文字ちょうど超過を ASCII で作ることで NAME_MAX_BYTES を下回りつつ char 制約で弾かれることを固定する
+    const overCharName = 'a'.repeat(TITLE_LIMITS.NAME_MAX_CHARS + 1);
+    expect(isValidTitleMaster({ name: overCharName, max: 99, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+  });
+
   it('rejects non-integer max and regen values', () => {
     expect(isValidTitleMaster({ name: 'プリコネ', max: 99.5, regen_minutes_per_point: 6 })).toBe(
       false,
