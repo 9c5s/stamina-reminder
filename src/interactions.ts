@@ -1,27 +1,22 @@
-import {
-  InteractionResponseFlags,
-  InteractionResponseType,
-  InteractionType,
-} from 'discord-interactions';
-
 export type Interaction = {
   type: number;
-  data?: { name?: string };
+  data?: { name?: string; [key: string]: any };
 };
 
-type InteractionResponse =
-  | { type: InteractionResponseType.PONG }
-  | {
-      type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE;
-      data: { content: string; flags: number };
-    };
+export type DispatchResult =
+  | { kind: 'pong' }
+  | { kind: 'route'; name: 'stamina' | 'title' }
+  | { kind: 'unknown' };
 
-export function dispatchInteraction(interaction: Interaction): InteractionResponse {
-  if (interaction.type === InteractionType.PING) {
-    return { type: InteractionResponseType.PONG };
+export function dispatchInteraction(interaction: Interaction): DispatchResult {
+  if (interaction.type === 1) {
+    return { kind: 'pong' };
   }
-  return {
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { content: '未対応のコマンド', flags: InteractionResponseFlags.EPHEMERAL },
-  };
+  if (interaction.type === 2) {
+    const name = interaction.data?.name;
+    if (name === 'stamina' || name === 'title') {
+      return { kind: 'route', name };
+    }
+  }
+  return { kind: 'unknown' };
 }
