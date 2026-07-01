@@ -1,8 +1,7 @@
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { optionsToRecord } from '../lib/options';
-import type { TitleMaster } from '../lib/titles';
-import { deleteTitle, KEY_PREFIX, putTitle } from '../lib/titles';
+import { deleteTitle, isValidTitleMaster, KEY_PREFIX, putTitle } from '../lib/titles';
 import { ephemeral } from './ephemeral';
 
 interface Interaction {
@@ -29,15 +28,16 @@ export async function handleTitle(
         return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
       }
       const max = Number(opts.max);
-      if (!Number.isFinite(max) || max <= 0) {
-        return ephemeral(c, '最大スタミナは1以上の数値を指定してください');
+      // Discord 側でも integer option だが、二重防御として handler でも整数判定する
+      if (!Number.isInteger(max) || max <= 0) {
+        return ephemeral(c, '最大スタミナは1以上の整数で指定してください');
       }
       if (max > 100000) {
         return ephemeral(c, '最大スタミナは 100000 以下で指定してください');
       }
       const regenMinutes = Number(opts.regen_minutes);
-      if (!Number.isFinite(regenMinutes) || regenMinutes <= 0) {
-        return ephemeral(c, '回復分数は1以上の数値を指定してください');
+      if (!Number.isInteger(regenMinutes) || regenMinutes <= 0) {
+        return ephemeral(c, '回復分数は1以上の整数で指定してください');
       }
       if (regenMinutes > 1440) {
         return ephemeral(c, '回復分数は 1440 以下 (1 日) で指定してください');
@@ -57,20 +57,38 @@ export async function handleTitle(
       // 省略サフィックス "\n(他 N 件は省略)" のための余白
       const SUFFIX_RESERVE = 30;
       let content = '';
-      let shown = 0;
+      // truncated は「LIMIT に達して打ち切った」場合のみ true にし、破損/欠落 skip とは区別する
+      let truncated = false;
+      let processed = 0;
       // 逐次 get してキャップ到達で打ち切り、キャップを超える KV read を発行しない
       for (const k of list.keys) {
+        processed++;
         const raw = await c.env.TITLES.get(k.name);
         if (!raw) continue;
-        const t = JSON.parse(raw) as TitleMaster;
-        const line = `- ${t.name}: max=${t.max}, regen=${t.regen_minutes_per_point}min/pt`;
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch (err) {
+          console.warn(`title KV entry corrupt (JSON parse failed): ${k.name}`, err);
+          continue;
+        }
+        if (!isValidTitleMaster(parsed)) {
+          console.warn(`title KV entry corrupt (schema mismatch): ${k.name}`);
+          continue;
+        }
+        const line = `- ${parsed.name}: max=${parsed.max}, regen=${parsed.regen_minutes_per_point}min/pt`;
         const nextLen = content.length + (content ? 1 : 0) + line.length;
-        if (nextLen > LIMIT - SUFFIX_RESERVE) break;
+        if (nextLen > LIMIT - SUFFIX_RESERVE) {
+          // この行は入りきらなかったので processed を巻き戻し、未処理件数として省略数へ加算する
+          processed--;
+          truncated = true;
+          break;
+        }
         content = content ? `${content}\n${line}` : line;
-        shown++;
       }
-      if (shown < list.keys.length) {
-        content += `\n(他 ${list.keys.length - shown} 件は省略)`;
+      if (!content) return ephemeral(c, 'タイトル未登録');
+      if (truncated) {
+        content += `\n(他 ${list.keys.length - processed} 件は省略)`;
       }
       return ephemeral(c, content);
     }
