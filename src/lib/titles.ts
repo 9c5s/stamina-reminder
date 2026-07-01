@@ -12,7 +12,13 @@ export const KEY_PREFIX = 'title:';
  * 破損値も同じ境界で拒否できるようにする。
  */
 export const TITLE_LIMITS = {
-  /** UTF-8 バイト長の上限。KV key `title:<name>` を 512 バイト以内に収める余裕を含む */
+  /**
+   * Discord option の max_length と対応する文字数 (Unicode code point) 上限。
+   * NAME_MAX_BYTES とは別制約で、Discord は文字数、KV は UTF-8 バイト長を独立に制約する。
+   * 100 文字は Discord option string の運用上の上限指定として commands.ts と共有する。
+   */
+  NAME_MAX_CHARS: 100,
+  /** KV key `title:<name>` を 512 バイト以内に収める余裕を含む UTF-8 バイト長の上限 */
   NAME_MAX_BYTES: 490,
   MAX_MIN: 1,
   MAX_MAX: 100000,

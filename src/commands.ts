@@ -30,7 +30,13 @@ export const commands: Command[] = [
         description: '現在のスタミナを登録',
         type: 1,
         options: [
-          { name: 'title', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+          {
+            name: 'title',
+            description: 'タイトル名',
+            type: 3,
+            required: true,
+            max_length: TITLE_LIMITS.NAME_MAX_CHARS,
+          },
           { name: 'current', description: '現在のスタミナ', type: 4, required: true },
         ],
       },
@@ -40,7 +46,13 @@ export const commands: Command[] = [
         description: '指定タイトルをキャンセル',
         type: 1,
         options: [
-          { name: 'title', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+          {
+            name: 'title',
+            description: 'タイトル名',
+            type: 3,
+            required: true,
+            max_length: TITLE_LIMITS.NAME_MAX_CHARS,
+          },
         ],
       },
     ],
@@ -55,7 +67,13 @@ export const commands: Command[] = [
         description: 'タイトルを追加',
         type: 1,
         options: [
-          { name: 'name', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+          {
+            name: 'name',
+            description: 'タイトル名',
+            type: 3,
+            required: true,
+            max_length: TITLE_LIMITS.NAME_MAX_CHARS,
+          },
           {
             name: 'max',
             description: '最大スタミナ',
@@ -80,7 +98,13 @@ export const commands: Command[] = [
         description: 'タイトルを削除',
         type: 1,
         options: [
-          { name: 'name', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+          {
+            name: 'name',
+            description: 'タイトル名',
+            type: 3,
+            required: true,
+            max_length: TITLE_LIMITS.NAME_MAX_CHARS,
+          },
         ],
       },
     ],
