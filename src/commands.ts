@@ -12,6 +12,8 @@ interface CommandOption {
 interface Command {
   name: string;
   description: string;
+  /** Discord パーミッションビット文字列。"8" = MANAGE_GUILD (管理者) のみ表示 */
+  default_member_permissions?: string;
   options?: CommandOption[];
 }
 
@@ -19,6 +21,7 @@ export const commands: Command[] = [
   {
     name: 'stamina',
     description: 'スタミナ通知の管理',
+    default_member_permissions: '8',
     options: [
       {
         name: 'add',
@@ -43,6 +46,7 @@ export const commands: Command[] = [
   {
     name: 'title',
     description: 'タイトルマスタの管理',
+    default_member_permissions: '8',
     options: [
       {
         name: 'add',
