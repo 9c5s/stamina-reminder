@@ -2,7 +2,8 @@ import { InteractionResponseType } from 'discord-interactions';
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { optionsToRecord } from '../lib/options';
-import { deleteTitle, listTitles, putTitle } from '../lib/titles';
+import type { TitleMaster } from '../lib/titles';
+import { deleteTitle, KEY_PREFIX, putTitle } from '../lib/titles';
 
 interface Interaction {
   data?: {
@@ -49,27 +50,27 @@ export async function handleTitle(
       return ephemeral(c, `${name} を登録 (max=${max}, regen=${regen}s/pt)`);
     }
     case 'list': {
-      const titles = await listTitles(c.env.TITLES);
-      if (!titles.length) return ephemeral(c, 'タイトル未登録');
-      const lines = titles.map(
-        (t) => `- ${t.name}: max=${t.max}, regen=${t.regen_seconds_per_point}s/pt`,
-      );
+      const list = await c.env.TITLES.list({ prefix: KEY_PREFIX });
+      if (!list.keys.length) return ephemeral(c, 'タイトル未登録');
       // Discord のメッセージ上限 (2000 文字) を超えないよう 1900 文字でキャップする
       const LIMIT = 1900;
       // 省略サフィックス "\n(他 N 件は省略)" のための余白
       const SUFFIX_RESERVE = 30;
       let content = '';
       let shown = 0;
-      for (const line of lines) {
+      // 逐次 get してキャップ到達で打ち切り、キャップを超える KV read を発行しない
+      for (const k of list.keys) {
+        const raw = await c.env.TITLES.get(k.name);
+        if (!raw) continue;
+        const t = JSON.parse(raw) as TitleMaster;
+        const line = `- ${t.name}: max=${t.max}, regen=${t.regen_seconds_per_point}s/pt`;
         const nextLen = content.length + (content ? 1 : 0) + line.length;
-        if (nextLen > LIMIT - SUFFIX_RESERVE && shown < lines.length) {
-          break;
-        }
+        if (nextLen > LIMIT - SUFFIX_RESERVE) break;
         content = content ? `${content}\n${line}` : line;
         shown++;
       }
-      if (shown < lines.length) {
-        content += `\n(他 ${lines.length - shown} 件は省略)`;
+      if (shown < list.keys.length) {
+        content += `\n(他 ${list.keys.length - shown} 件は省略)`;
       }
       return ephemeral(c, content);
     }
