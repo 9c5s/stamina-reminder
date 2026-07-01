@@ -1,9 +1,9 @@
-import { InteractionResponseType } from 'discord-interactions';
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { optionsToRecord } from '../lib/options';
 import type { TitleMaster } from '../lib/titles';
 import { deleteTitle, KEY_PREFIX, putTitle } from '../lib/titles';
+import { ephemeral } from './ephemeral';
 
 interface Interaction {
   data?: {
@@ -86,11 +86,4 @@ export async function handleTitle(
     }
   }
   return ephemeral(c, '未対応のサブコマンド');
-}
-
-function ephemeral(c: Context, msg: string) {
-  return c.json({
-    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-    data: { content: msg, flags: 64 },
-  });
 }
