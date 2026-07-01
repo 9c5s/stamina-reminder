@@ -65,7 +65,11 @@ async function main() {
     body: req.body,
   });
 
-  console.log(resp.status, await resp.text());
+  const respText = await resp.text();
+  console.log(resp.status, respText);
+  if (!resp.ok) {
+    process.exit(1);
+  }
 }
 
 if (import.meta.main) {
