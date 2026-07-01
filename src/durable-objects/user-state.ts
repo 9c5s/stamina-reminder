@@ -135,12 +135,20 @@ export class UserState extends DurableObject<Bindings> {
     const userId = this.ctx.id.name ?? 'anon';
 
     for (const r of due) {
-      const resp = await postChannelMessage({
-        botToken: this.env.DISCORD_BOT_TOKEN,
-        channelId: r.channel_id,
-        content: `<@${userId}> ${r.title_name} のスタミナが満タンになった`,
-        mentionUserId: userId,
-      });
+      let resp: Response;
+      try {
+        resp = await postChannelMessage({
+          botToken: this.env.DISCORD_BOT_TOKEN,
+          channelId: r.channel_id,
+          content: `<@${userId}> ${r.title_name} のスタミナが満タンになった`,
+          mentionUserId: userId,
+        });
+      } catch (err) {
+        // ネットワークエラー (AbortSignal.timeout 等) が発生した場合は自前で再スケジュールして復帰する
+        console.log(`network error for ${r.title_name}: ${err}, rescheduling in 60s`);
+        await this.ctx.storage.setAlarm(Date.now() + 60_000);
+        return;
+      }
       if (!resp.ok) {
         if (resp.status === 429) {
           // Discord の Retry-After (秒) を尊重してアラームを再スケジュールし、リトライを無駄に消費しない
@@ -158,10 +166,15 @@ export class UserState extends DurableObject<Bindings> {
           return;
         }
         if (resp.status >= 500) {
-          // 5xx は CF DO のリトライに委ねる (最大 6 回、2 秒スタート指数バックオフ)
-          throw new Error(`postChannelMessage failed for ${r.title_name}: status=${resp.status}`);
+          // 5xx は自前で再スケジュールし、CF の 6 回 retry cap でリマインダーが止まるのを防ぐ
+          const fallbackMs = 60_000;
+          console.log(
+            `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
+          );
+          await this.ctx.storage.setAlarm(Date.now() + fallbackMs);
+          return;
         }
-        // 永続エラー (4xx / 429 以外, またはその他非 2xx): 再試行しても成功しないため行を削除して続行
+        // 永続エラー (4xx / 429 以外): 再試行しても成功しないため行を削除して続行
         // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
         console.error(`permanent error for ${r.title_name}: status=${resp.status}, deleting row`);
         this.sql.exec(
