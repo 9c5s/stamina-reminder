@@ -492,22 +492,27 @@ git status
 
 ---
 
-### Task 6: Cloudflare 側 - custom API Token を発行
+### Task 6: Cloudflare 側 - Workers Builds が使う token の scope を最小化
 
 **Files:**
 - なし (Cloudflare ダッシュボード上の作業のみ)
 
 **Interfaces:**
 - Consumes: Cloudflare アカウント (`9c5s`, account_id `b40fdc1cf09112832597f6e05f829cae`)
-- Produces: scope を絞った custom API Token (Workers Builds で使用)
+- Produces: scope を最小限に絞った Workers Builds 用 API Token (spec §8 の 4 permissions)
+
+spec §8 の 2 経路 (A: auto-generated を編集 / B: custom token 事前発行) のどちらでも構わない。Workers Builds Build 画面が既存 token 貼り付け UI を提供しない場合は経路 A に fallback する。実装時は Task 7 Step 1 で Worker を先に作り、OAuth 連携で auto-generated された token を編集する経路 A が UI 操作数最小になる。
 
 - [ ] **Step 1: API Tokens ページを開く**
 
-`https://dash.cloudflare.com/profile/api-tokens` を開く → `Create Token` → `Get started` (Custom token)。
+`https://dash.cloudflare.com/profile/api-tokens`。
+
+- 経路 A の場合: Task 7 Step 2 の OAuth 連携後に生成された `stamina-reminder` 名の token を編集する (`⋯` メニュー / Edit)
+- 経路 B の場合: `Create Token` → `Get started` (Custom token) で新規発行
 
 - [ ] **Step 2: Permissions を設定 (spec §8 と一致)**
 
-以下 4 つを追加:
+以下 4 つを Permissions リストに揃える:
 - Account → **Workers Scripts: Edit**
 - Account → **Workers KV Storage: Read**
 - Account → **Account Settings: Read**
@@ -517,11 +522,12 @@ Account Resources: `Include → Specific account → 9c5s (b40fdc1cf09112832597f
 
 Client IP Address Filtering / TTL は空 (デフォルト)。
 
-`Continue to summary` → `Create Token`。
+保存 (`Continue to summary` → `Save` / `Update`)。
 
-- [ ] **Step 3: token を安全に控える**
+- [ ] **Step 3: token 文字列の扱い**
 
-token は再表示されない。`D:\projects\cloudflare\.secrets\stamina-reminder-builds-token` 等のローカル secrets ファイル、またはパスワードマネージャに保存。
+- 経路 A: 既存 token の scope を絞っただけなので token 文字列を新規に受け取ることはない。Workers Builds 側は既に使用中なので何もしない
+- 経路 B: 発行した token 文字列は再表示されないため `D:\projects\cloudflare\.secrets\stamina-reminder-builds-token` 等のローカル secrets ファイルに保存し、Task 7 Step 3 で Workers Builds に貼り付ける
 
 注意: GitHub / Discord / 本リポジトリの commit には絶対に含めない。
 
@@ -546,20 +552,27 @@ token は再表示されない。`D:\projects\cloudflare\.secrets\stamina-remind
 
 `Workers & Pages → stamina-reminder → Settings → Build` → `Git Integration` → `Connect to Git provider` → GitHub → OAuth 承認 → リポジトリ `9c5s/stamina-reminder` を選択。
 
-- [ ] **Step 3: API Token を custom token に差し替え**
+- [ ] **Step 3: API Token を最小権限に絞る**
 
-同 `Settings → Build` 画面の `API Token` セクションで、auto-generated token を削除して **Task 6 で発行した custom token** に貼り替える。
+Workers Builds の `Settings → Build → API Token` 画面には (2026-07 時点で) 既存 token 貼り付け UI が実装されていない場合がある。UI に選択肢がないときは経路 A で対応する:
+
+- **経路 A (推奨)**: この画面では触らず、Task 6 Step 2 で auto-generated `stamina-reminder` token の scope を編集する。Workers Builds はこの同じ token を引き続き使うため、追加操作は不要
+- **経路 B**: 画面上に Custom Token を選択する UI がある場合のみ、auto-generated を削除して Task 6 Step 3 で保存した custom token を貼り付ける
+
+いずれの場合も、Workers Builds が使う token が spec §8 の 4 permissions に絞られていることを Task 6 Step 2 の scope で担保する。
 
 - [ ] **Step 4: Build command と Deploy command を設定**
 
-- Branch (Production branch): `main`
+- Repository: `9c5s/stamina-reminder`
+- Production branch: `main`
 - Build command: `bun install --frozen-lockfile --ignore-scripts`
 - Deploy command: `bun run deploy`
 - Root directory: `/` (空欄でも OK、`/` 明示が確実)
+- Compatibility date: Advanced settings 内の Compatibility date dropdown は「flag 変更のあった日」のみを列挙するため任意の日付を選べない場合がある。`wrangler.toml` の `compatibility_date` (例: `2026-06-30`) に最も近い過去の日付 (この例では `2026-06-16`) を選ぶ。deploy 時は `wrangler.toml` の値が authoritative になるため、Dashboard 値は初回 Hello World deploy 用のフォールバック扱い
 
 - [ ] **Step 5: Non-production branch builds を OFF**
 
-同画面の `Non-production branch builds` (または `Preview deployments`) を **無効**。チームでなく 1 人運用のため preview の利点が薄く、Secret 露出回避を優先する。
+現行 CF UI では `Builds for non-production branches` チェックボックス (Repository / Production branch 設定と同じセクション) を **外す** ことで無効化する。Advanced settings 内の `Non-production branch deploy command` は関連設定だが、上位トグルを外すだけで完全無効化される (deploy command 欄を空欄にする必要はない、grey out される)。チームでなく 1 人運用のため preview の利点が薄く、Secret 露出回避を優先する。
 
 - [ ] **Step 6: 保存して設定完了を確認**
 

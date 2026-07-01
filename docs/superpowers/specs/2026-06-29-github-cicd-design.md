@@ -352,9 +352,9 @@ Bun の version pin (Workers Builds 側):
 - `WORKERS_CI_COMMIT_SHA`
 - `WORKERS_CI_BRANCH`
 
-### Workers Builds への API Token (auto-generated を使わない)
+### Workers Builds への API Token (最小権限に絞る)
 
-OAuth 連携時に Cloudflare が自動生成する API Token は権限が広い (アカウント全体の Worker 編集権限を含むことがある)。本プロジェクトでは **custom API Token を発行して紐付ける**:
+OAuth 連携時に Cloudflare が自動生成する API Token は権限が広い (アカウント全体の Worker 編集権限を含むことがある)。本プロジェクトでは **Workers Builds が最終的に使う token を最小権限 4 permissions に絞る** ことを要件とする:
 
 - Account → **Workers Scripts: Edit**
 - Account → **Workers KV Storage: Read** (`wrangler deploy` は binding の存在検証のみで KV namespace の create / write は行わないため Read で十分。namespace 作成はローカル `wrangler kv namespace create` (OAuth セッション) で実施)
@@ -362,7 +362,12 @@ OAuth 連携時に Cloudflare が自動生成する API Token は権限が広い
 - User → **User Details: Read** (Cloudflare の API Token UI 上は User スコープにあり Account では選択できないため、category dropdown を `User` に切り替えてから選ぶ)
 - 対象 Account は `b40fdc1cf09112832597f6e05f829cae` (9c5s) のみに限定発行
 
-dashboard の `Workers & Pages → Project → Settings → Build → API Token` から既存 token を差し替える。auto-generated を残したまま運用しない。
+Workers Builds の `Settings → Build → API Token` 画面には既存 token を貼り付ける UI が (2026-07 時点で) 用意されておらず、選択肢は「Create new token」のみとなる場合がある。したがって実運用では以下 2 経路のどちらかで上記スコープに絞る:
+
+- **経路 A (推奨、UI 操作数最小)**: OAuth 連携時に auto-generated された `stamina-reminder` 名の token を `dash.cloudflare.com/profile/api-tokens` から編集し、上記 4 permissions + 9c5s account 限定に scope を絞る。以降 Workers Builds はこの token を継続使用する
+- **経路 B**: 事前に上記スコープの custom token を発行 → Workers Builds Build 画面から Custom Token を選択する UI が実装されている環境でのみ経路 B が採用可能。実装されていない場合は経路 A に fallback する
+
+いずれの経路でも Workers Builds が実際に使う token は最小権限 4 permissions に絞られる。token 発行順序 (create-then-attach か attach-then-scope-down か) は問わず、要件は「auto-generated の広いスコープをそのまま Workers Builds に持たせない」こと。
 
 参考: [Workers Builds Configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), [Workers Builds Build image](https://developers.cloudflare.com/workers/ci-cd/builds/build-image/)。
 
