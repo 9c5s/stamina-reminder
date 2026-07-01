@@ -327,21 +327,40 @@ export class UserState extends DurableObject<Bindings> {
 
   /**
    * 次のアラーム時刻を再計算してセットする。
-   * stamina テーブルの MIN(full_at_ms) と、storage に保存された retry:* エントリの最小値を比較し、
-   * 両者の小さい方をセットする。どちらも存在しない場合はアラームを削除する。
+   * retry-deferred な title (retry:* エントリが未来のもの) を stamina クエリから除外し、
+   * 過去の full_at_ms が候補に混入して即時発火ループが起きるのを防ぐ。
+   * retry deadline 自体は別 candidate として保持し、期限通りに再通知する。
+   * どちらの candidate も存在しない場合はアラームを削除する。
    */
   private async refreshAlarm(): Promise<void> {
-    const rows = [
-      ...this.sql.exec<{ next_at: number | null }>(
-        `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
-      ),
-    ];
-    const nextPending = rows[0]?.next_at ?? null;
     const now = Date.now();
     const retryEntries = await this.ctx.storage.list<number>({ prefix: 'retry:' });
+    const deferredTitles: string[] = [];
     let minRetry: number | null = null;
-    for (const ts of retryEntries.values()) {
-      if (ts > now && (minRetry === null || ts < minRetry)) minRetry = ts;
+    for (const [key, ts] of retryEntries) {
+      if (ts > now) {
+        deferredTitles.push(key.slice('retry:'.length));
+        if (minRetry === null || ts < minRetry) minRetry = ts;
+      }
+    }
+    let nextPending: number | null = null;
+    if (deferredTitles.length === 0) {
+      const rows = [
+        ...this.sql.exec<{ next_at: number | null }>(
+          `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
+        ),
+      ];
+      nextPending = rows[0]?.next_at ?? null;
+    } else {
+      // SQLite の bind limit は 999 だが単一ユーザ用途では超過しない
+      const placeholders = deferredTitles.map(() => '?').join(',');
+      const rows = [
+        ...this.sql.exec<{ next_at: number | null }>(
+          `SELECT MIN(full_at_ms) AS next_at FROM stamina WHERE title_name NOT IN (${placeholders})`,
+          ...deferredTitles,
+        ),
+      ];
+      nextPending = rows[0]?.next_at ?? null;
     }
     const candidates: number[] = [];
     if (nextPending !== null) candidates.push(nextPending);
