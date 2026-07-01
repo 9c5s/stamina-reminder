@@ -7,7 +7,7 @@ export function parseDevVars(text: string): Record<string, string> {
       .map((line) => {
         const [k, ...v] = line.split('=');
         return [
-          k!.trim(),
+          k?.trim(),
           v
             .join('=')
             .trim()

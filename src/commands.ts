@@ -3,6 +3,7 @@ interface CommandOption {
   description: string;
   type: number;
   required?: boolean;
+  max_length?: number;
   options?: CommandOption[];
 }
 
@@ -22,7 +23,7 @@ export const commands: Command[] = [
         description: '現在のスタミナを登録',
         type: 1,
         options: [
-          { name: 'title', description: 'タイトル名', type: 3, required: true },
+          { name: 'title', description: 'タイトル名', type: 3, required: true, max_length: 100 },
           { name: 'current', description: '現在のスタミナ', type: 4, required: true },
         ],
       },
@@ -31,7 +32,9 @@ export const commands: Command[] = [
         name: 'cancel',
         description: '指定タイトルをキャンセル',
         type: 1,
-        options: [{ name: 'title', description: 'タイトル名', type: 3, required: true }],
+        options: [
+          { name: 'title', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+        ],
       },
     ],
   },
@@ -44,7 +47,7 @@ export const commands: Command[] = [
         description: 'タイトルを追加',
         type: 1,
         options: [
-          { name: 'name', description: 'タイトル名', type: 3, required: true },
+          { name: 'name', description: 'タイトル名', type: 3, required: true, max_length: 100 },
           { name: 'max', description: '最大スタミナ', type: 4, required: true },
           {
             name: 'regen_seconds',
@@ -59,7 +62,9 @@ export const commands: Command[] = [
         name: 'remove',
         description: 'タイトルを削除',
         type: 1,
-        options: [{ name: 'name', description: 'タイトル名', type: 3, required: true }],
+        options: [
+          { name: 'name', description: 'タイトル名', type: 3, required: true, max_length: 100 },
+        ],
       },
     ],
   },
