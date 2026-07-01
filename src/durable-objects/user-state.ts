@@ -100,7 +100,7 @@ export class UserState extends DurableObject<Bindings> {
     );
 
     await this.refreshAlarm();
-    const at = new Date(fullAtMs).toLocaleString('ja-JP');
+    const at = new Date(fullAtMs).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
     return new Response(`${title}: ${current}/${t.max} 登録、満タン予定 ${at}`);
   }
 
@@ -113,7 +113,7 @@ export class UserState extends DurableObject<Bindings> {
     if (!rows.length) return new Response('登録なし');
     const lines = rows.map(
       (r) =>
-        `- ${r.title_name}: 現在 ${r.current} -> 満タン ${new Date(r.full_at_ms).toLocaleString('ja-JP')}`,
+        `- ${r.title_name}: 現在 ${r.current} -> 満タン ${new Date(r.full_at_ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`,
     );
     return new Response(lines.join('\n'));
   }
