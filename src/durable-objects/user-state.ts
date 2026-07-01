@@ -181,6 +181,8 @@ export class UserState extends DurableObject<Bindings> {
     this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, title);
     // tombstone を保持し、キャンセル後に古い add が到着しても再挿入されないようにする
     await this.ctx.storage.put(`cancel:${title}`, Date.now());
+    // retry が予約されていてもキャンセルされたので不要になるため削除する
+    await this.ctx.storage.delete(`retry:${title}`);
     await this.refreshAlarm();
     return new Response(`${title} をキャンセル`);
   }
@@ -196,6 +198,12 @@ export class UserState extends DurableObject<Bindings> {
     const userId = this.ctx.id.name ?? 'anon';
 
     for (const r of due) {
+      // retry_until_ms が now より未来なら、まだリトライ待ちのためこの回は skip する
+      const retryUntilMs = await this.ctx.storage.get<number>(`retry:${r.title_name}`);
+      if (typeof retryUntilMs === 'number' && retryUntilMs > now) {
+        continue;
+      }
+
       let resp: Response;
       try {
         resp = await postChannelMessage({
@@ -205,106 +213,95 @@ export class UserState extends DurableObject<Bindings> {
           mentionUserId: userId,
         });
       } catch (err) {
-        // ネットワークエラー (AbortSignal.timeout 等) が発生した場合は自前で再スケジュールして復帰する
+        // ネットワークエラー (AbortSignal.timeout 等): 60 秒後にリトライする
         console.log(`network error for ${r.title_name}: ${err}, rescheduling in 60s`);
-        await this.scheduleRetry(60_000, r.title_name);
-        return;
+        await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
+        continue;
       }
-      if (!resp.ok) {
-        if (resp.status === 429) {
-          // Discord の Retry-After (秒) を尊重してアラームを再スケジュールし、リトライを無駄に消費しない
-          // 行は削除しないため次回アラーム起動時に再処理される
-          const retryAfterRaw = resp.headers.get('Retry-After');
-          const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN;
-          const retryMs =
-            Number.isFinite(retryAfterSec) && retryAfterSec > 0
-              ? Math.ceil(retryAfterSec * 1000)
-              : 5000;
-          console.log(
-            `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
-          );
-          await this.scheduleRetry(retryMs, r.title_name);
-          return;
-        }
-        // 回復可能な認証/権限エラー: トークンローテーション中やボット権限設定中は行を保持して再スケジュールする
-        if (resp.status === 401 || resp.status === 403) {
-          const fallbackMs = 60_000;
-          console.log(
-            `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
-          );
-          await this.scheduleRetry(fallbackMs, r.title_name);
-          return;
-        }
-        // 真に永続的なクライアントエラー (400/404 等): チャンネル削除や不正ペイロードのため行を削除して続行
+
+      if (resp.ok) {
+        // 通知成功 (2xx): 行を削除し retry エントリも削除する
         // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
-        if (resp.status >= 400 && resp.status < 500) {
-          console.error(`permanent failure for ${r.title_name} (status=${resp.status}), deleting`);
-          this.sql.exec(
-            `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
-            r.title_name,
-            r.full_at_ms,
-          );
-          continue;
-        }
-        // 5xx は自前で再スケジュールし、CF の 6 回 retry cap でリマインダーが止まるのを防ぐ
-        {
-          const fallbackMs = 60_000;
-          console.log(
-            `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
-          );
-          await this.scheduleRetry(fallbackMs, r.title_name);
-          return;
-        }
+        this.sql.exec(
+          `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
+          r.title_name,
+          r.full_at_ms,
+        );
+        await this.ctx.storage.delete(`retry:${r.title_name}`);
+        continue;
       }
-      // 通知成功 (2xx) を確認した後に行削除 -> at-least-once でも重複通知は 1 件まで
-      // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
-      this.sql.exec(
-        `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
-        r.title_name,
-        r.full_at_ms,
+
+      if (resp.status === 429) {
+        // Discord の Retry-After (秒) を尊重してリトライ期限を保存し、レート制限を消費しない
+        const retryAfterRaw = resp.headers.get('Retry-After');
+        const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN;
+        const retryMs =
+          Number.isFinite(retryAfterSec) && retryAfterSec > 0
+            ? Math.ceil(retryAfterSec * 1000)
+            : 5000;
+        console.log(
+          `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
+        );
+        await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + retryMs);
+        continue;
+      }
+
+      if (resp.status === 401 || resp.status === 403) {
+        // 回復可能な認証/権限エラー: トークンローテーション中やボット権限設定中は 60 秒後にリトライする
+        console.log(
+          `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in 60s`,
+        );
+        await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
+        continue;
+      }
+
+      if (resp.status >= 400 && resp.status < 500) {
+        // 真に永続的なクライアントエラー (400/404 等): チャンネル削除や不正ペイロードのため行を削除して続行する
+        // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
+        console.error(`permanent failure for ${r.title_name} (status=${resp.status}), deleting`);
+        this.sql.exec(
+          `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
+          r.title_name,
+          r.full_at_ms,
+        );
+        continue;
+      }
+
+      // 5xx / その他: CF の 6 回 retry cap でリマインダーが止まるのを防ぐため 60 秒後にリトライする
+      console.log(
+        `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in 60s`,
       );
+      await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
     }
 
     await this.refreshAlarm();
   }
 
   /**
-   * リトライ用アラームをスケジュールする。
-   * DO の alarm スロットは 1 つのみのため、既存の pending 行の最小 full_at_ms と比較し、
-   * 早い方をセットすることで無関係なリマインダーの遅延を防ぐ。
-   * excludeTitle を指定すると、その行を MIN 集計から除外する。
-   * 失敗した due 行自体は過去時刻のため、除外しないと Math.min が即時再発火を選んでしまう。
+   * 次のアラーム時刻を再計算してセットする。
+   * stamina テーブルの MIN(full_at_ms) と、storage に保存された retry:* エントリの最小値を比較し、
+   * 両者の小さい方をセットする。どちらも存在しない場合はアラームを削除する。
    */
-  private async scheduleRetry(retryMs: number, excludeTitle?: string): Promise<void> {
-    const retryAt = Date.now() + retryMs;
-    const rows = excludeTitle
-      ? [
-          ...this.sql.exec<{ next_at: number | null }>(
-            `SELECT MIN(full_at_ms) AS next_at FROM stamina WHERE title_name != ?`,
-            excludeTitle,
-          ),
-        ]
-      : [
-          ...this.sql.exec<{ next_at: number | null }>(
-            `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
-          ),
-        ];
-    const nextPending = rows[0]?.next_at ?? null;
-    const target = nextPending !== null ? Math.min(retryAt, nextPending) : retryAt;
-    await this.ctx.storage.setAlarm(target);
-  }
-
   private async refreshAlarm(): Promise<void> {
     const rows = [
       ...this.sql.exec<{ next_at: number | null }>(
         `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
       ),
     ];
-    const nextAt = rows[0]?.next_at;
-    if (nextAt) {
-      await this.ctx.storage.setAlarm(nextAt);
-    } else {
+    const nextPending = rows[0]?.next_at ?? null;
+    const now = Date.now();
+    const retryEntries = await this.ctx.storage.list<number>({ prefix: 'retry:' });
+    let minRetry: number | null = null;
+    for (const ts of retryEntries.values()) {
+      if (ts > now && (minRetry === null || ts < minRetry)) minRetry = ts;
+    }
+    const candidates: number[] = [];
+    if (nextPending !== null) candidates.push(nextPending);
+    if (minRetry !== null) candidates.push(minRetry);
+    if (candidates.length === 0) {
       await this.ctx.storage.deleteAlarm();
+    } else {
+      await this.ctx.storage.setAlarm(Math.min(...candidates));
     }
   }
 }
