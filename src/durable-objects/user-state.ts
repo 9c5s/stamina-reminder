@@ -119,7 +119,7 @@ export class UserState extends DurableObject<Bindings> {
         now,
       ),
     ];
-    const userId = (this.ctx.id.name as string | undefined) ?? 'anon';
+    const userId = this.ctx.id.name ?? 'anon';
 
     for (const r of due) {
       const resp = await postChannelMessage({
@@ -128,12 +128,22 @@ export class UserState extends DurableObject<Bindings> {
         content: `<@${userId}> ${r.title_name} のスタミナが満タンになった`,
       });
       if (!resp.ok) {
-        // 2xx 以外は行を削除せず例外 throw -> DO 再試行 (最大 6 回、2 秒スタート指数バックオフ)
-        // 通知失敗時にリマインダが消えるのを防ぐ (token 不正 / 5xx / 429 すべて該当)
         if (resp.status === 429) {
-          const retryAfter = resp.headers.get('Retry-After') ?? 'unknown';
-          console.log(`rate limited for ${r.title_name}, retry-after=${retryAfter}`);
+          // Discord の Retry-After (秒) を尊重してアラームを再スケジュールし、リトライを無駄に消費しない
+          // 行は削除しないため次回アラーム起動時に再処理される
+          const retryAfterRaw = resp.headers.get('Retry-After');
+          const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN;
+          const retryMs =
+            Number.isFinite(retryAfterSec) && retryAfterSec > 0
+              ? Math.ceil(retryAfterSec * 1000)
+              : 5000;
+          console.log(
+            `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
+          );
+          await this.ctx.storage.setAlarm(Date.now() + retryMs);
+          return;
         }
+        // 2xx 以外は行を削除せず例外 throw -> DO 再試行 (最大 6 回、2 秒スタート指数バックオフ)
         throw new Error(`postChannelMessage failed for ${r.title_name}: status=${resp.status}`);
       }
       // 通知成功 (2xx) を確認した後に行削除 -> at-least-once でも重複通知は 1 件まで
