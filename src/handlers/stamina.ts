@@ -26,6 +26,18 @@ export async function handleStamina(
   if (!userId || !channelId) {
     return ephemeral(c, '不正な interaction: user_id または channel_id 欠落');
   }
+  // /stamina add と /stamina cancel は title を KV キーに使うため、送信前にバイト長を検証する
+  if (sub.name === 'add' || sub.name === 'cancel') {
+    const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
+    if (titleOpt) {
+      const titleVal = String(titleOpt.value ?? '').trim();
+      const titleBytes = new TextEncoder().encode(titleVal).length;
+      if (titleBytes > 490) {
+        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+      }
+    }
+  }
+
   const stub = c.env.USER_STATE.get(c.env.USER_STATE.idFromName(userId));
 
   const resp = await stub.fetch(

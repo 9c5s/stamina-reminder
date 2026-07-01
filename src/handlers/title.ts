@@ -23,6 +23,10 @@ export async function handleTitle(
     case 'add': {
       const name = String(opts.name ?? '').trim();
       if (!name) return ephemeral(c, 'タイトル名は必須です');
+      const nameBytes = new TextEncoder().encode(name).length;
+      if (nameBytes > 490) {
+        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+      }
       const max = Number(opts.max);
       if (!Number.isFinite(max) || max <= 0) {
         return ephemeral(c, '最大スタミナは1以上の数値を指定してください');
@@ -49,6 +53,10 @@ export async function handleTitle(
     case 'remove': {
       const name = String(opts.name ?? '').trim();
       if (!name) return ephemeral(c, 'タイトル名は必須です');
+      const nameBytes = new TextEncoder().encode(name).length;
+      if (nameBytes > 490) {
+        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+      }
       await deleteTitle(c.env.TITLES, name);
       return ephemeral(c, `${name} を削除`);
     }
