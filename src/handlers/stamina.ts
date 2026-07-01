@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
-import { getTitle } from '../lib/titles';
+import { getTitle, TITLE_LIMITS } from '../lib/titles';
 import { ephemeral } from './ephemeral';
 
 interface Interaction {
@@ -38,8 +38,11 @@ export async function handleStamina(
       return ephemeral(c, 'タイトル名は必須です');
     }
     const titleBytes = new TextEncoder().encode(titleVal).length;
-    if (titleBytes > 490) {
-      return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+    if (titleBytes > TITLE_LIMITS.NAME_MAX_BYTES) {
+      return ephemeral(
+        c,
+        `タイトル名が長すぎます (UTF-8 で ${TITLE_LIMITS.NAME_MAX_BYTES} バイト以内)`,
+      );
     }
   }
 
