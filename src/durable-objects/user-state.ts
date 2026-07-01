@@ -49,12 +49,22 @@ export class UserState extends DurableObject<Bindings> {
   private async handleStamina(payload: DispatchPayload): Promise<Response> {
     const opts = optionsToRecord(payload.options);
     switch (payload.sub_name) {
-      case 'add':
-        return this.add(String(opts.title), Number(opts.current), payload.channel_id);
+      case 'add': {
+        const title = String(opts.title ?? '').trim();
+        if (!title) return new Response('タイトル名は必須です');
+        const current = Number(opts.current);
+        if (!Number.isFinite(current) || current < 0) {
+          return new Response('現在のスタミナは0以上の数値を指定してください');
+        }
+        return this.add(title, current, payload.channel_id);
+      }
       case 'list':
         return this.list();
-      case 'cancel':
-        return this.cancel(String(opts.title));
+      case 'cancel': {
+        const title = String(opts.title ?? '').trim();
+        if (!title) return new Response('タイトル名は必須です');
+        return this.cancel(title);
+      }
     }
     return new Response('未対応のサブコマンド');
   }
