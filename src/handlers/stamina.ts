@@ -73,6 +73,10 @@ export async function handleStamina(
     }),
   );
 
+  if (!resp.ok) {
+    console.error('DO returned non-2xx:', resp.status);
+    return ephemeral(c, '処理中にエラーが発生しました');
+  }
   const body = await resp.text();
   return c.json({
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
