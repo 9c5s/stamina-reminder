@@ -18,6 +18,8 @@ interface DispatchPayload {
   channel_id: string;
   /** add サブコマンド用: handler 層で解決済みのタイトルマスター */
   title_master?: { max: number; regen_seconds_per_point: number };
+  /** add サブコマンド用: ハンドラ層で採取した登録時刻 (競合判定に使用、add 時必須) */
+  registered_at_ms?: number;
 }
 
 export class UserState extends DurableObject<Bindings> {
@@ -59,7 +61,15 @@ export class UserState extends DurableObject<Bindings> {
         }
         // title_master は handler 層で KV から解決済みのため DO 内で外部 await 不要
         if (!payload.title_master) return new Response('title_master が未指定です');
-        return this.add(title, current, payload.channel_id, payload.title_master);
+        if (payload.registered_at_ms === undefined)
+          return new Response('registered_at_ms が未指定です');
+        return this.add(
+          title,
+          current,
+          payload.channel_id,
+          payload.title_master,
+          payload.registered_at_ms,
+        );
       }
       case 'list':
         return this.list();
@@ -77,6 +87,7 @@ export class UserState extends DurableObject<Bindings> {
     current: number,
     channelId: string,
     titleMaster: { max: number; regen_seconds_per_point: number },
+    registeredAtMs: number,
   ): Promise<Response> {
     // titleMaster は handler 層で解決済みのため DO 内に外部 await が存在せず、並行 add による競合を防止できる
     const t = titleMaster;
@@ -94,16 +105,33 @@ export class UserState extends DurableObject<Bindings> {
       return new Response(`${title} は既に満タン`);
     }
 
+    // UPSERT: 既存行の registered_at_ms より新しいリクエストのみ上書きし、古い後着リクエストを排除する
     this.sql.exec(
-      `INSERT OR REPLACE INTO stamina
-       (title_name, current, full_at_ms, channel_id, registered_at_ms)
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO stamina (title_name, current, full_at_ms, channel_id, registered_at_ms)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(title_name) DO UPDATE SET
+         current = excluded.current,
+         full_at_ms = excluded.full_at_ms,
+         channel_id = excluded.channel_id,
+         registered_at_ms = excluded.registered_at_ms
+       WHERE excluded.registered_at_ms > stamina.registered_at_ms`,
       title,
       current,
       fullAtMs,
       channelId,
-      nowMs,
+      registeredAtMs,
     );
+
+    // 書き込みが成功したか確認する (古いリクエストは UPSERT の WHERE 節で弾かれ行は更新されない)
+    const written = [
+      ...this.sql.exec<{ registered_at_ms: number }>(
+        `SELECT registered_at_ms FROM stamina WHERE title_name = ?`,
+        title,
+      ),
+    ];
+    if (written[0]?.registered_at_ms !== registeredAtMs) {
+      return new Response('より新しい登録が既にあるため無視しました');
+    }
 
     await this.refreshAlarm();
     const at = new Date(fullAtMs).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });

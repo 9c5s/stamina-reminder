@@ -41,9 +41,12 @@ export async function handleStamina(
 
   // /stamina add はタイトルマスターを handler 層で解決し DO の外部 await を排除して race を防止する
   let titleMaster: { max: number; regen_seconds_per_point: number } | undefined;
+  // ハンドラ層で採取した登録時刻を DO に渡し、古いリクエストを UPSERT の WHERE 節で弾く
+  let registeredAtMs: number | undefined;
   if (sub.name === 'add') {
     const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
     const titleVal = String(titleOpt?.value ?? '').trim();
+    registeredAtMs = Date.now();
     const t = await getTitle(c.env.TITLES, titleVal);
     if (!t) {
       return ephemeral(c, `未登録のタイトル: ${titleVal} (先に /title add で登録して)`);
@@ -62,6 +65,7 @@ export async function handleStamina(
         options: sub.options ?? [],
         channel_id: channelId,
         ...(titleMaster ? { title_master: titleMaster } : {}),
+        ...(registeredAtMs !== undefined ? { registered_at_ms: registeredAtMs } : {}),
       }),
     }),
   );
