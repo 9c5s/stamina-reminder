@@ -29,7 +29,10 @@ Discord                              Cloudflare
                                       │                      ├─ SQLite (stamina)  │
   ┌─────────────────┐  REST POST      │                      ├─ setAlarm(満タン時刻)│
   │ Discord REST    │◄────────────────│ ─◄──── alarm() ──────┤                    │
-  └─────────────────┘                 │                      └─ KV(TITLES) 読み込み│
+  └─────────────────┘                 │                                           │
+                                      │  KV(TITLES) 読み込みは handler 層で解決し   │
+                                      │  DO には解決済みマスターを渡して外部 await │
+                                      │  を DO 内で無くす                          │
                                       │                                           │
                                       │ KV (TITLES) タイトルマスタ                  │
                                       └──────────────────────────────────────────┘
@@ -62,7 +65,7 @@ Discord                              Cloudflare
 | `/stamina add` | `title:string` `current:integer` | 現在スタミナを記録、満タン時刻を計算して setAlarm |
 | `/stamina list` | (なし) | 自分の登録中スタミナ一覧 (満タン時刻付き) |
 | `/stamina cancel` | `title:string` | 指定タイトルのスケジュールを取り消し |
-| `/title add` | `name:string` `max:integer` `regen_minutes:integer` | タイトルマスタを KV に登録 (内部は秒に変換して保持) |
+| `/title add` | `name:string` `max:integer` `regen_minutes:integer` | タイトルマスタを KV に登録 (内部も分単位で保持し、満タン時刻計算時のみ秒へ換算) |
 | `/title list` | (なし) | KV のタイトルマスタ一覧 |
 | `/title remove` | `name:string` | KV からタイトル削除 |
 
