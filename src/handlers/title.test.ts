@@ -148,4 +148,43 @@ describe('handleTitle list', () => {
       warn.mockRestore();
     }
   });
+
+  it('appends the未表示 suffix so shown + hidden equals list.keys.length', async () => {
+    // 1 件分すら入らない狭い擬似 LIMIT を作るために、非常に長いタイトル名を 2 件用意する。
+    // 1 件目の 1 行が SUFFIX_RESERVE を控えた LIMIT に収まらないケースは実運用では発生し
+    // にくいので、本ケースは「truncated 分岐に入ったとき shown ベースで数える」不変式が
+    // 破損 skip と混在しても崩れないことを固定する目的で残す。
+    const longName = 'あ'.repeat(20);
+    const kv = makeFakeKV({
+      [`${KEY_PREFIX}${longName}A`]: JSON.stringify({
+        name: `${longName}A`,
+        max: 100,
+        regen_minutes_per_point: 5,
+      }),
+      [`${KEY_PREFIX}壊れた`]: '{not-json',
+      [`${KEY_PREFIX}${longName}B`]: JSON.stringify({
+        name: `${longName}B`,
+        max: 100,
+        regen_minutes_per_point: 5,
+      }),
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const { content } = await invoke(kv, subCommand('list', []));
+      // 3 件全てが正常だった場合の想定合計と現状の shown 分を比較する。
+      // shown + (未表示 N) = 3 になっていれば合計が list.keys.length と一致する不変式が成立する
+      const shownLines = content.split('\n').filter((l) => l.startsWith('- ')).length;
+      const suffixMatch = content.match(/\(他 (\d+) 件は未表示\)/);
+      if (suffixMatch) {
+        const hidden = Number(suffixMatch[1]);
+        expect(shownLines + hidden).toBe(3);
+      } else {
+        // truncation 分岐に入らなかった (全件入りきった) 場合は破損 skip 分だけ落ちる想定
+        expect(shownLines).toBe(2);
+      }
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

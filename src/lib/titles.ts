@@ -39,6 +39,9 @@ export function isValidTitleMaster(v: unknown): v is TitleMaster {
   if (typeof t.name !== 'string') return false;
   const trimmed = t.name.trim();
   if (trimmed.length === 0) return false;
+  // Discord option の max_length と KV key の UTF-8 上限を両方適用する。
+  // 100 文字超は Discord option から入力不能、490 バイト超は KV key に収まらない。
+  if ([...t.name].length > TITLE_LIMITS.NAME_MAX_CHARS) return false;
   if (nameByteLength(t.name) > TITLE_LIMITS.NAME_MAX_BYTES) return false;
   if (
     typeof t.max !== 'number' ||
@@ -61,7 +64,8 @@ export function isValidTitleMaster(v: unknown): v is TitleMaster {
 
 export async function getTitle(kv: KVNamespace, name: string): Promise<TitleMaster | null> {
   const raw = await kv.get(`${KEY_PREFIX}${name}`);
-  if (!raw) return null;
+  // 未登録 (null) と空文字 ('') を区別する。空文字は破損として parse-failure 経路に流す
+  if (raw === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);

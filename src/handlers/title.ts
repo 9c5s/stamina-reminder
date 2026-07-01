@@ -68,12 +68,12 @@ export async function handleTitle(
       let content = '';
       // truncated は「LIMIT に達して打ち切った」場合のみ true にし、破損/欠落 skip とは区別する
       let truncated = false;
-      let processed = 0;
+      let shown = 0;
       // 逐次 get してキャップ到達で打ち切り、キャップを超える KV read を発行しない
       for (const k of list.keys) {
-        processed++;
         const raw = await c.env.TITLES.get(k.name);
-        if (!raw) continue;
+        // 未登録 (null) は list と実 KV の同時変更でしか起きない稀ケースなので静かに skip
+        if (raw === null) continue;
         let parsed: unknown;
         try {
           parsed = JSON.parse(raw);
@@ -88,19 +88,18 @@ export async function handleTitle(
         const line = `- ${parsed.name}: max=${parsed.max}, regen=${parsed.regen_minutes_per_point}min/pt`;
         const nextLen = content.length + (content ? 1 : 0) + line.length;
         if (nextLen > LIMIT - SUFFIX_RESERVE) {
-          // この行は入りきらなかったので processed を巻き戻し、未処理件数として省略数へ加算する
-          processed--;
           truncated = true;
           break;
         }
         content = content ? `${content}\n${line}` : line;
+        shown++;
       }
       if (!content) return ephemeral(c, 'タイトル未登録');
       if (truncated) {
-        // 破損 skip 済みは processed に含まれ表示件数から除外済み。ここでカウントするのは
-        // truncation で「まだ触っていない key」のみで、その中には破損 key も含まれ得る。
-        // 文言を「未処理」にして「省略」より意味範囲を実装と一致させる。
-        content += `\n(他 ${list.keys.length - processed} 件は未処理)`;
+        // shown ベースなので「表示件数 + 未表示件数 = list.keys.length」の不変式が成立する。
+        // 未表示分には LIMIT 超過分と破損 skip 分の両方が含まれ得るが、ユーザ視点では
+        // どちらも「見えていない」ので一括で伝える方が数字が合う。
+        content += `\n(他 ${list.keys.length - shown} 件は未表示)`;
       }
       return ephemeral(c, content);
     }
