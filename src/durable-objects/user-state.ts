@@ -165,8 +165,28 @@ export class UserState extends DurableObject<Bindings> {
           await this.ctx.storage.setAlarm(Date.now() + retryMs);
           return;
         }
-        if (resp.status >= 500) {
-          // 5xx は自前で再スケジュールし、CF の 6 回 retry cap でリマインダーが止まるのを防ぐ
+        // 回復可能な認証/権限エラー: トークンローテーション中やボット権限設定中は行を保持して再スケジュールする
+        if (resp.status === 401 || resp.status === 403) {
+          const fallbackMs = 60_000;
+          console.log(
+            `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
+          );
+          await this.ctx.storage.setAlarm(Date.now() + fallbackMs);
+          return;
+        }
+        // 真に永続的なクライアントエラー (400/404 等): チャンネル削除や不正ペイロードのため行を削除して続行
+        // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
+        if (resp.status >= 400 && resp.status < 500) {
+          console.error(`permanent failure for ${r.title_name} (status=${resp.status}), deleting`);
+          this.sql.exec(
+            `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
+            r.title_name,
+            r.full_at_ms,
+          );
+          continue;
+        }
+        // 5xx は自前で再スケジュールし、CF の 6 回 retry cap でリマインダーが止まるのを防ぐ
+        {
           const fallbackMs = 60_000;
           console.log(
             `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
@@ -174,15 +194,6 @@ export class UserState extends DurableObject<Bindings> {
           await this.ctx.storage.setAlarm(Date.now() + fallbackMs);
           return;
         }
-        // 永続エラー (4xx / 429 以外): 再試行しても成功しないため行を削除して続行
-        // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
-        console.error(`permanent error for ${r.title_name}: status=${resp.status}, deleting row`);
-        this.sql.exec(
-          `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
-          r.title_name,
-          r.full_at_ms,
-        );
-        continue;
       }
       // 通知成功 (2xx) を確認した後に行削除 -> at-least-once でも重複通知は 1 件まで
       // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
