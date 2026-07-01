@@ -47,6 +47,8 @@ export async function handleStamina(
   let titleMaster: { max: number; regen_seconds_per_point: number } | undefined;
   // ハンドラ層で採取した登録時刻を DO に渡し、古いリクエストを UPSERT の WHERE 節で弾く
   let registeredAtMs: number | undefined;
+  // ハンドラ層で採取したキャンセル時刻を DO に渡し、tombstone と DELETE の時刻基準を add と対称にする
+  let cancelAtMs: number | undefined;
   if (sub.name === 'add') {
     // titleOpt と titleVal は上で既に抽出済み
     registeredAtMs = Date.now();
@@ -55,6 +57,10 @@ export async function handleStamina(
       return ephemeral(c, `未登録のタイトル: ${titleVal} (先に /title add で登録して)`);
     }
     titleMaster = { max: t.max, regen_seconds_per_point: t.regen_seconds_per_point };
+  }
+  if (sub.name === 'cancel') {
+    // interaction 到着時刻を DO に渡し、add と同一の基準でキャンセルの前後関係を判定できるようにする
+    cancelAtMs = Date.now();
   }
 
   const stub = c.env.USER_STATE.get(c.env.USER_STATE.idFromName(userId));
@@ -69,6 +75,7 @@ export async function handleStamina(
         channel_id: channelId,
         ...(titleMaster ? { title_master: titleMaster } : {}),
         ...(registeredAtMs !== undefined ? { registered_at_ms: registeredAtMs } : {}),
+        ...(cancelAtMs !== undefined ? { cancel_at_ms: cancelAtMs } : {}),
       }),
     }),
   );

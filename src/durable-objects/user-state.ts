@@ -20,6 +20,8 @@ interface DispatchPayload {
   title_master?: { max: number; regen_seconds_per_point: number };
   /** add サブコマンド用: ハンドラ層で採取した登録時刻 (競合判定に使用、add 時必須) */
   registered_at_ms?: number;
+  /** cancel サブコマンド用: ハンドラ層で採取したキャンセル時刻 (tombstone と DELETE の時刻基準) */
+  cancel_at_ms?: number;
 }
 
 export class UserState extends DurableObject<Bindings> {
@@ -76,7 +78,8 @@ export class UserState extends DurableObject<Bindings> {
       case 'cancel': {
         const title = String(opts.title ?? '').trim();
         if (!title) return new Response('タイトル名は必須です');
-        return this.cancel(title);
+        // handler 層で採取した時刻を優先し、欠落時は現在時刻でフォールバックする
+        return this.cancel(title, payload.cancel_at_ms ?? Date.now());
       }
     }
     return new Response('未対応のサブコマンド');
@@ -177,10 +180,15 @@ export class UserState extends DurableObject<Bindings> {
     return new Response(content);
   }
 
-  private async cancel(title: string): Promise<Response> {
-    this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, title);
-    // tombstone を保持し、キャンセル後に古い add が到着しても再挿入されないようにする
-    await this.ctx.storage.put(`cancel:${title}`, Date.now());
+  private async cancel(title: string, cancelAtMs: number): Promise<Response> {
+    // cancelAtMs より前に登録された行のみ削除し、後着の add (registered_at_ms > cancelAtMs) を保護する
+    this.sql.exec(
+      `DELETE FROM stamina WHERE title_name = ? AND registered_at_ms <= ?`,
+      title,
+      cancelAtMs,
+    );
+    // tombstone には handler 採取の cancelAtMs を使い、add との前後関係を interaction 到着順で決定する
+    await this.ctx.storage.put(`cancel:${title}`, cancelAtMs);
     // retry が予約されていてもキャンセルされたので不要になるため削除する
     await this.ctx.storage.delete(`retry:${title}`);
     await this.refreshAlarm();
