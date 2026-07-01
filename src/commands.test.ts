@@ -31,4 +31,20 @@ describe('commands definition', () => {
       ?.options?.find((o) => o.name === 'max');
     expect(max).toMatchObject({ type: 4, required: true, min_value: 1, max_value: 100000 });
   });
+
+  it('caps every string name option at 100 chars so TITLE_LIMITS.NAME_MAX_CHARS stays honored', () => {
+    // 直値で境界を固定して、TITLE_LIMITS を変えたときに shape テストが警告する状態を保つ
+    const nameLikeOptions: { name: string; max_length?: number }[] = [];
+    for (const cmd of commands) {
+      for (const sub of cmd.options ?? []) {
+        for (const opt of sub.options ?? []) {
+          if (opt.name === 'name' || opt.name === 'title') nameLikeOptions.push(opt);
+        }
+      }
+    }
+    expect(nameLikeOptions.length).toBeGreaterThan(0);
+    for (const opt of nameLikeOptions) {
+      expect(opt.max_length).toBe(100);
+    }
+  });
 });

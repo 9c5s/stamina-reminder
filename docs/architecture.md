@@ -184,7 +184,7 @@ new_sqlite_classes = ["UserState"]
 
 ## 8. コード雛形
 
-> **注記 (更新方針)**: 本セクションのコード片は Stage 1 着手時点の初期実装スケッチである。実装が進んだ後は `src/` 配下の TypeScript が真実の source となり、雛形は最終挙動と一致しない場合がある (例: `/title add` の runtime validation、handler 層での KV 解決、`TITLE_LIMITS` 境界共有など)。実装挙動を確認したい場合は `src/` を優先し、雛形は Stage 1 の設計意図の参照として扱う。差分が大きくなった際は本節を書き直すか、`src/` への誘導コメントで済ませる。
+> **注記 (更新方針)**: 本セクションのコード片は設計時点の初期スケッチである。実装が進んだ後は `src/` 配下の TypeScript が真実の source となり、雛形は最終挙動と一致しない場合がある (例: `/title add` の runtime validation、handler 層での KV 解決、`TITLE_LIMITS` 境界共有など)。実装挙動を確認したい場合は `src/` を優先し、雛形は設計意図の参照として扱う。差分が大きくなった際は本節を書き直すか、`src/` への誘導コメントで済ませる。
 
 ### 8.1 `src/index.ts` (Hono entry)
 ```ts
