@@ -194,7 +194,7 @@ export class UserState extends DurableObject<Bindings> {
       } catch (err) {
         // ネットワークエラー (AbortSignal.timeout 等) が発生した場合は自前で再スケジュールして復帰する
         console.log(`network error for ${r.title_name}: ${err}, rescheduling in 60s`);
-        await this.ctx.storage.setAlarm(Date.now() + 60_000);
+        await this.scheduleRetry(60_000);
         return;
       }
       if (!resp.ok) {
@@ -210,7 +210,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
           );
-          await this.ctx.storage.setAlarm(Date.now() + retryMs);
+          await this.scheduleRetry(retryMs);
           return;
         }
         // 回復可能な認証/権限エラー: トークンローテーション中やボット権限設定中は行を保持して再スケジュールする
@@ -219,7 +219,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
           );
-          await this.ctx.storage.setAlarm(Date.now() + fallbackMs);
+          await this.scheduleRetry(fallbackMs);
           return;
         }
         // 真に永続的なクライアントエラー (400/404 等): チャンネル削除や不正ペイロードのため行を削除して続行
@@ -239,7 +239,7 @@ export class UserState extends DurableObject<Bindings> {
           console.log(
             `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in ${fallbackMs}ms`,
           );
-          await this.ctx.storage.setAlarm(Date.now() + fallbackMs);
+          await this.scheduleRetry(fallbackMs);
           return;
         }
       }
@@ -253,6 +253,23 @@ export class UserState extends DurableObject<Bindings> {
     }
 
     await this.refreshAlarm();
+  }
+
+  /**
+   * リトライ用アラームをスケジュールする。
+   * DO の alarm スロットは 1 つのみのため、既存の pending 行の最小 full_at_ms と比較し、
+   * 早い方をセットすることで無関係なリマインダーの遅延を防ぐ。
+   */
+  private async scheduleRetry(retryMs: number): Promise<void> {
+    const retryAt = Date.now() + retryMs;
+    const rows = [
+      ...this.sql.exec<{ next_at: number | null }>(
+        `SELECT MIN(full_at_ms) AS next_at FROM stamina`,
+      ),
+    ];
+    const nextPending = rows[0]?.next_at ?? null;
+    const target = nextPending !== null ? Math.min(retryAt, nextPending) : retryAt;
+    await this.ctx.storage.setAlarm(target);
   }
 
   private async refreshAlarm(): Promise<void> {
