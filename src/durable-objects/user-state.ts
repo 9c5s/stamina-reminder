@@ -100,12 +100,13 @@ export class UserState extends DurableObject<Bindings> {
 
     // titleMaster は handler 層で解決済みのため DO 内に外部 await が存在せず、並行 add による競合を防止できる
     const t = titleMaster;
-    const nowMs = Date.now();
+    // nowMs に registered_at_ms を使い、interaction 到着時刻を満タン計算の起点にする
+    // DO 処理遅延分がずれを生じさせないよう、handler 採取時刻を一貫して使う
     const fullAtMs = calculateFullAtMs({
       current,
       max: t.max,
       regenSecondsPerPoint: t.regen_seconds_per_point,
-      nowMs,
+      nowMs: registeredAtMs,
     });
     if (fullAtMs === null) {
       // 既に満タンの場合、自分の registered_at_ms 以下の行のみ削除してアラームを更新する
