@@ -41,4 +41,10 @@ describe('parseDevVars', () => {
     const result = parseDevVars('');
     expect(result).toEqual({});
   });
+
+  it('strips a leading BOM before parsing', () => {
+    const bom = '﻿';
+    const result = parseDevVars(`${bom}FOO=bar\n`);
+    expect(result).toEqual({ FOO: 'bar' });
+  });
 });
