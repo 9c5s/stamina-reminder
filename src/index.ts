@@ -1,6 +1,10 @@
-import { verifyKey } from 'discord-interactions';
+import { InteractionResponseType, verifyKey } from 'discord-interactions';
 import { Hono } from 'hono';
-import { dispatchInteraction, type Interaction } from './interactions';
+import { handleStamina } from './handlers/stamina';
+import { handleTitle } from './handlers/title';
+import { dispatchInteraction } from './interactions';
+
+export { UserState } from './durable-objects/user-state';
 
 export type Bindings = {
   USER_STATE: DurableObjectNamespace;
@@ -22,9 +26,20 @@ app.post('/interactions', async (c) => {
     return c.text('invalid signature', 401);
   }
 
-  const interaction = JSON.parse(body) as Interaction;
-  const response = dispatchInteraction(interaction);
-  return c.json(response);
+  const interaction = JSON.parse(body);
+  const result = dispatchInteraction(interaction);
+
+  if (result.kind === 'pong') {
+    return c.json({ type: 1 });
+  }
+  if (result.kind === 'route') {
+    if (result.name === 'stamina') return handleStamina(c, interaction);
+    if (result.name === 'title') return handleTitle(c, interaction);
+  }
+  return c.json({
+    type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+    data: { content: '未対応のコマンド', flags: 64 },
+  });
 });
 
 app.get('/healthz', (c) => c.text('ok'));
