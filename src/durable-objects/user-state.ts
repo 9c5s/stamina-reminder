@@ -197,21 +197,51 @@ export class UserState extends DurableObject<Bindings> {
   }
 
   override async alarm(): Promise<void> {
+    // retry:* エントリを事前に全件読み込み、期限が未来のものを除外リストに入れる
+    // これにより各イテレーションで storage を都度読まずに済み、期限未来の行を SELECT から除外できる
+    const retryEntries = await this.ctx.storage.list<number>({ prefix: 'retry:' });
     const now = Date.now();
-    const due = [
-      ...this.sql.exec<Pick<StaminaRow, 'title_name' | 'channel_id' | 'full_at_ms'>>(
-        `SELECT title_name, channel_id, full_at_ms FROM stamina WHERE full_at_ms <= ?`,
-        now,
-      ),
-    ];
+    const excludedTitles: string[] = [];
+    for (const [key, ts] of retryEntries) {
+      if (ts > now) excludedTitles.push(key.slice('retry:'.length));
+    }
+
     const userId = this.ctx.id.name ?? 'anon';
 
-    for (const r of due) {
-      // retry_until_ms が now より未来なら、まだリトライ待ちのためこの回は skip する
-      const retryUntilMs = await this.ctx.storage.get<number>(`retry:${r.title_name}`);
-      if (typeof retryUntilMs === 'number' && retryUntilMs > now) {
-        continue;
+    while (true) {
+      const nowInner = Date.now();
+      // 各イテレーションで最古の due 行を 1 件だけ再 SELECT し、cancel や re-add の interleave を反映する
+      let due: Pick<StaminaRow, 'title_name' | 'channel_id' | 'full_at_ms'> | undefined;
+      if (excludedTitles.length === 0) {
+        const rows = [
+          ...this.sql.exec<Pick<StaminaRow, 'title_name' | 'channel_id' | 'full_at_ms'>>(
+            `SELECT title_name, channel_id, full_at_ms FROM stamina
+             WHERE full_at_ms <= ?
+             ORDER BY full_at_ms
+             LIMIT 1`,
+            nowInner,
+          ),
+        ];
+        due = rows[0];
+      } else {
+        // retry 待ち中のタイトルを NOT IN で除外して最古の due を取得する
+        // SQLite の bind limit は 999 だが単一ユーザ用途では超過しない
+        const placeholders = excludedTitles.map(() => '?').join(',');
+        const rows = [
+          ...this.sql.exec<Pick<StaminaRow, 'title_name' | 'channel_id' | 'full_at_ms'>>(
+            `SELECT title_name, channel_id, full_at_ms FROM stamina
+             WHERE full_at_ms <= ? AND title_name NOT IN (${placeholders})
+             ORDER BY full_at_ms
+             LIMIT 1`,
+            nowInner,
+            ...excludedTitles,
+          ),
+        ];
+        due = rows[0];
       }
+      if (!due) break;
+
+      const r = due;
 
       let resp: Response;
       try {
@@ -225,6 +255,7 @@ export class UserState extends DurableObject<Bindings> {
         // ネットワークエラー (AbortSignal.timeout 等): 60 秒後にリトライする
         console.log(`network error for ${r.title_name}: ${err}, rescheduling in 60s`);
         await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
+        excludedTitles.push(r.title_name);
         continue;
       }
 
@@ -252,6 +283,7 @@ export class UserState extends DurableObject<Bindings> {
           `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
         );
         await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + retryMs);
+        excludedTitles.push(r.title_name);
         continue;
       }
 
@@ -261,6 +293,7 @@ export class UserState extends DurableObject<Bindings> {
           `auth/permission error for ${r.title_name} (status=${resp.status}), rescheduling in 60s`,
         );
         await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
+        excludedTitles.push(r.title_name);
         continue;
       }
 
@@ -281,6 +314,7 @@ export class UserState extends DurableObject<Bindings> {
         `transient failure for ${r.title_name} (status=${resp.status}), rescheduling in 60s`,
       );
       await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + 60_000);
+      excludedTitles.push(r.title_name);
     }
 
     await this.refreshAlarm();
