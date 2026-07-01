@@ -1,6 +1,7 @@
 export function parseDevVars(text: string): Record<string, string> {
   return Object.fromEntries(
     text
+      .replace(/^﻿/, '')
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith('#'))
