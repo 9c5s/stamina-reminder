@@ -27,19 +27,19 @@ export async function handleStamina(
   if (!userId || !channelId) {
     return ephemeral(c, '不正な interaction: user_id または channel_id 欠落');
   }
+  // titleOpt と titleVal は add/cancel の両ブロックで共用するため先頭で 1 回だけ抽出する
+  const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
+  const titleVal = String(titleOpt?.value ?? '').trim();
+
   // /stamina add と /stamina cancel は title を KV キーに使うため、送信前にバイト長を検証する
   if (sub.name === 'add' || sub.name === 'cancel') {
-    const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
-    if (titleOpt) {
-      const titleVal = String(titleOpt.value ?? '').trim();
-      // add は空白のみのタイトルを /title add と対称なエラーで弾く
-      if (sub.name === 'add' && !titleVal) {
-        return ephemeral(c, 'タイトル名は必須です');
-      }
-      const titleBytes = new TextEncoder().encode(titleVal).length;
-      if (titleBytes > 490) {
-        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
-      }
+    // add は空白のみのタイトルを /title add と対称なエラーで弾く
+    if (sub.name === 'add' && !titleVal) {
+      return ephemeral(c, 'タイトル名は必須です');
+    }
+    const titleBytes = new TextEncoder().encode(titleVal).length;
+    if (titleBytes > 490) {
+      return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
     }
   }
 
@@ -48,8 +48,7 @@ export async function handleStamina(
   // ハンドラ層で採取した登録時刻を DO に渡し、古いリクエストを UPSERT の WHERE 節で弾く
   let registeredAtMs: number | undefined;
   if (sub.name === 'add') {
-    const titleOpt = (sub.options ?? []).find((o) => o.name === 'title');
-    const titleVal = String(titleOpt?.value ?? '').trim();
+    // titleOpt と titleVal は上で既に抽出済み
     registeredAtMs = Date.now();
     const t = await getTitle(c.env.TITLES, titleVal);
     if (!t) {
