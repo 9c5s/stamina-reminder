@@ -16,5 +16,7 @@ export async function postChannelMessage(args: PostChannelMessageArgs): Promise<
       content: args.content,
       allowed_mentions: { parse: ['users'] },
     }),
+    // Discord が応答しない場合に alarm() が無期限にブロックされることを防ぐ
+    signal: AbortSignal.timeout(10_000),
   });
 }
