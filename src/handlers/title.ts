@@ -31,9 +31,15 @@ export async function handleTitle(
       if (!Number.isFinite(max) || max <= 0) {
         return ephemeral(c, '最大スタミナは1以上の数値を指定してください');
       }
+      if (max > 100000) {
+        return ephemeral(c, '最大スタミナは 100000 以下で指定してください');
+      }
       const regen = Number(opts.regen_seconds);
       if (!Number.isFinite(regen) || regen <= 0) {
         return ephemeral(c, '回復秒数は1以上の数値を指定してください');
+      }
+      if (regen > 86400) {
+        return ephemeral(c, '回復秒数は 86400 以下 (1 日) で指定してください');
       }
       await putTitle(c.env.TITLES, {
         name,

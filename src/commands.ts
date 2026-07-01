@@ -4,6 +4,8 @@ interface CommandOption {
   type: number;
   required?: boolean;
   max_length?: number;
+  min_value?: number;
+  max_value?: number;
   options?: CommandOption[];
 }
 
@@ -48,12 +50,21 @@ export const commands: Command[] = [
         type: 1,
         options: [
           { name: 'name', description: 'タイトル名', type: 3, required: true, max_length: 100 },
-          { name: 'max', description: '最大スタミナ', type: 4, required: true },
+          {
+            name: 'max',
+            description: '最大スタミナ',
+            type: 4,
+            required: true,
+            min_value: 1,
+            max_value: 100000,
+          },
           {
             name: 'regen_seconds',
             description: '1ポイント回復に必要な秒数',
             type: 4,
             required: true,
+            min_value: 1,
+            max_value: 86400,
           },
         ],
       },
