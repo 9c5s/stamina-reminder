@@ -35,8 +35,14 @@ export function buildRegisterRequest(args: {
 }
 
 async function main() {
-  const text = await Bun.file('.dev.vars').text();
-  const env = parseDevVars(text);
+  let env: Record<string, string>;
+  try {
+    const text = await Bun.file('.dev.vars').text();
+    env = parseDevVars(text);
+  } catch (e) {
+    console.error('.dev.vars を読み込めませんでした:', (e as Error).message);
+    process.exit(1);
+  }
 
   const appId = env.DISCORD_APPLICATION_ID;
   const token = env.DISCORD_BOT_TOKEN;
@@ -56,14 +62,21 @@ async function main() {
     process.exit(1);
   }
 
-  const resp = await fetch(req.url, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bot ${token}`,
-    },
-    body: req.body,
-  });
+  let resp: Response;
+  try {
+    resp = await fetch(req.url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bot ${token}`,
+      },
+      body: req.body,
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (e) {
+    console.error('Discord API へのリクエストに失敗しました:', (e as Error).message);
+    process.exit(1);
+  }
 
   const respText = await resp.text();
   console.log(resp.status, respText);
