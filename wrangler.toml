@@ -15,3 +15,11 @@ DISCORD_PUBLIC_KEY = "3b53dc2bbf957c2fffa59ee933ced96e41ac9d0dfde66aeb7907a82ed8
 [[kv_namespaces]]
 binding = "TITLES"
 id = "148aeb001ec045898d0f5a41c9b51e44"
+
+[[durable_objects.bindings]]
+name = "USER_STATE"
+class_name = "UserState"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["UserState"]
