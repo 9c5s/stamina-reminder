@@ -115,7 +115,21 @@ export class UserState extends DurableObject<Bindings> {
       (r) =>
         `- ${r.title_name}: 現在 ${r.current} -> 満タン ${new Date(r.full_at_ms).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}`,
     );
-    return new Response(lines.join('\n'));
+    // Discord のメッセージ上限 2000 字に対し 1900 字でキャップし、省略件数を末尾に付加する
+    const LIMIT = 1900;
+    const SUFFIX_RESERVE = 30;
+    let content = '';
+    let shown = 0;
+    for (const line of lines) {
+      const nextLen = content.length + (content ? 1 : 0) + line.length;
+      if (nextLen > LIMIT - SUFFIX_RESERVE && shown < lines.length) break;
+      content = content ? `${content}\n${line}` : line;
+      shown++;
+    }
+    if (shown < lines.length) {
+      content += `\n(他 ${lines.length - shown} 件は省略)`;
+    }
+    return new Response(content);
   }
 
   private async cancel(title: string): Promise<Response> {
