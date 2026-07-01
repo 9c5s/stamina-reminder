@@ -48,7 +48,24 @@ export async function handleTitle(
       const lines = titles.map(
         (t) => `- ${t.name}: max=${t.max}, regen=${t.regen_seconds_per_point}s/pt`,
       );
-      return ephemeral(c, lines.join('\n'));
+      // Discord のメッセージ上限 (2000 文字) を超えないよう 1900 文字でキャップする
+      const LIMIT = 1900;
+      // 省略サフィックス "\n(他 N 件は省略)" のための余白
+      const SUFFIX_RESERVE = 30;
+      let content = '';
+      let shown = 0;
+      for (const line of lines) {
+        const nextLen = content.length + (content ? 1 : 0) + line.length;
+        if (nextLen > LIMIT - SUFFIX_RESERVE && shown < lines.length) {
+          break;
+        }
+        content = content ? `${content}\n${line}` : line;
+        shown++;
+      }
+      if (shown < lines.length) {
+        content += `\n(他 ${lines.length - shown} 件は省略)`;
+      }
+      return ephemeral(c, content);
     }
     case 'remove': {
       const name = String(opts.name ?? '').trim();
