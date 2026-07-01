@@ -72,6 +72,9 @@ export class UserState extends DurableObject<Bindings> {
       nowMs,
     });
     if (fullAtMs === null) {
+      // 既に満タンの場合、古いアラーム行が残っていれば削除してアラームを更新する
+      this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, title);
+      await this.refreshAlarm();
       return new Response(`${title} は既に満タン`);
     }
 
@@ -114,8 +117,8 @@ export class UserState extends DurableObject<Bindings> {
   override async alarm(): Promise<void> {
     const now = Date.now();
     const due = [
-      ...this.sql.exec<Pick<StaminaRow, 'title_name' | 'channel_id'>>(
-        `SELECT title_name, channel_id FROM stamina WHERE full_at_ms <= ?`,
+      ...this.sql.exec<Pick<StaminaRow, 'title_name' | 'channel_id' | 'full_at_ms'>>(
+        `SELECT title_name, channel_id, full_at_ms FROM stamina WHERE full_at_ms <= ?`,
         now,
       ),
     ];
@@ -143,11 +146,27 @@ export class UserState extends DurableObject<Bindings> {
           await this.ctx.storage.setAlarm(Date.now() + retryMs);
           return;
         }
-        // 2xx 以外は行を削除せず例外 throw -> DO 再試行 (最大 6 回、2 秒スタート指数バックオフ)
-        throw new Error(`postChannelMessage failed for ${r.title_name}: status=${resp.status}`);
+        if (resp.status >= 500) {
+          // 5xx は CF DO のリトライに委ねる (最大 6 回、2 秒スタート指数バックオフ)
+          throw new Error(`postChannelMessage failed for ${r.title_name}: status=${resp.status}`);
+        }
+        // 永続エラー (4xx / 429 以外, またはその他非 2xx): 再試行しても成功しないため行を削除して続行
+        // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
+        console.error(`permanent error for ${r.title_name}: status=${resp.status}, deleting row`);
+        this.sql.exec(
+          `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
+          r.title_name,
+          r.full_at_ms,
+        );
+        continue;
       }
       // 通知成功 (2xx) を確認した後に行削除 -> at-least-once でも重複通知は 1 件まで
-      this.sql.exec(`DELETE FROM stamina WHERE title_name = ?`, r.title_name);
+      // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
+      this.sql.exec(
+        `DELETE FROM stamina WHERE title_name = ? AND full_at_ms = ?`,
+        r.title_name,
+        r.full_at_ms,
+      );
     }
 
     await this.refreshAlarm();
