@@ -7,6 +7,8 @@ export type Interaction = {
   member?: { user?: { id: string } };
   user?: { id: string };
   channel_id?: string;
+  /** Discord の新しいペイロード形式では channel オブジェクトが存在する場合がある */
+  channel?: { id: string };
 };
 
 export type DispatchResult =

@@ -9,6 +9,8 @@ interface Interaction {
   member?: { user?: { id: string } };
   user?: { id: string };
   channel_id?: string;
+  /** Discord の新しいペイロード形式では channel オブジェクトが存在する場合がある */
+  channel?: { id: string };
 }
 
 export async function handleStamina(
@@ -19,7 +21,8 @@ export async function handleStamina(
   if (!sub) return ephemeral(c, 'サブコマンド指定なし');
 
   const userId = interaction.member?.user?.id ?? interaction.user?.id;
-  const channelId = interaction.channel_id;
+  // 旧ペイロードは channel_id (フラット)、新ペイロードは channel.id (ネスト) を使う
+  const channelId = interaction.channel_id ?? interaction.channel?.id;
   if (!userId || !channelId) {
     return ephemeral(c, '不正な interaction: user_id または channel_id 欠落');
   }
