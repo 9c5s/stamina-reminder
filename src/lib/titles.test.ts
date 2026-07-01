@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getTitle, isValidTitleMaster, KEY_PREFIX } from './titles';
+import { getTitle, isValidTitleMaster, KEY_PREFIX, TITLE_LIMITS } from './titles';
 
 function makeFakeKV(entries: Record<string, string> = {}): KVNamespace {
   const store = new Map<string, string>(Object.entries(entries));
@@ -62,6 +62,61 @@ describe('isValidTitleMaster', () => {
         regen_minutes_per_point: Number.POSITIVE_INFINITY,
       }),
     ).toBe(false);
+  });
+
+  it('rejects an empty or whitespace-only name', () => {
+    expect(isValidTitleMaster({ name: '', max: 99, regen_minutes_per_point: 6 })).toBe(false);
+    expect(isValidTitleMaster({ name: '   ', max: 99, regen_minutes_per_point: 6 })).toBe(false);
+  });
+
+  it('rejects a name whose UTF-8 byte length exceeds NAME_MAX_BYTES', () => {
+    const overflowName = 'あ'.repeat(TITLE_LIMITS.NAME_MAX_BYTES); // 3 bytes/char * NAME_MAX_BYTES
+    expect(isValidTitleMaster({ name: overflowName, max: 99, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+  });
+
+  it('rejects non-integer max and regen values', () => {
+    expect(isValidTitleMaster({ name: 'プリコネ', max: 99.5, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+    expect(isValidTitleMaster({ name: 'プリコネ', max: 99, regen_minutes_per_point: 6.5 })).toBe(
+      false,
+    );
+  });
+
+  it('rejects values above the upper bound', () => {
+    expect(
+      isValidTitleMaster({
+        name: 'プリコネ',
+        max: TITLE_LIMITS.MAX_MAX + 1,
+        regen_minutes_per_point: 6,
+      }),
+    ).toBe(false);
+    expect(
+      isValidTitleMaster({
+        name: 'プリコネ',
+        max: 99,
+        regen_minutes_per_point: TITLE_LIMITS.REGEN_MINUTES_MAX + 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('accepts values at the exact boundary', () => {
+    expect(
+      isValidTitleMaster({
+        name: 'プリコネ',
+        max: TITLE_LIMITS.MAX_MIN,
+        regen_minutes_per_point: TITLE_LIMITS.REGEN_MINUTES_MIN,
+      }),
+    ).toBe(true);
+    expect(
+      isValidTitleMaster({
+        name: 'プリコネ',
+        max: TITLE_LIMITS.MAX_MAX,
+        regen_minutes_per_point: TITLE_LIMITS.REGEN_MINUTES_MAX,
+      }),
+    ).toBe(true);
   });
 });
 

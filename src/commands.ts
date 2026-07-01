@@ -1,3 +1,5 @@
+import { TITLE_LIMITS } from './lib/titles';
+
 interface CommandOption {
   name: string;
   description: string;
@@ -59,16 +61,16 @@ export const commands: Command[] = [
             description: '最大スタミナ',
             type: 4,
             required: true,
-            min_value: 1,
-            max_value: 100000,
+            min_value: TITLE_LIMITS.MAX_MIN,
+            max_value: TITLE_LIMITS.MAX_MAX,
           },
           {
             name: 'regen_minutes',
             description: '1ポイント回復に必要な分数',
             type: 4,
             required: true,
-            min_value: 1,
-            max_value: 1440,
+            min_value: TITLE_LIMITS.REGEN_MINUTES_MIN,
+            max_value: TITLE_LIMITS.REGEN_MINUTES_MAX,
           },
         ],
       },

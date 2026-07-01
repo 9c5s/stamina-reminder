@@ -81,7 +81,7 @@ describe('handleTitle add', () => {
         { name: 'regen_minutes', value: 1.5 },
       ]),
     );
-    expect(content).toBe('回復分数は1以上の整数で指定してください');
+    expect(content).toBe('回復分数は 1 以上の整数で指定してください');
     expect(kv.__store.size).toBe(0);
   });
 
@@ -109,7 +109,7 @@ describe('handleTitle add', () => {
         { name: 'regen_minutes', value: 6 },
       ]),
     );
-    expect(content).toBe('最大スタミナは1以上の整数で指定してください');
+    expect(content).toBe('最大スタミナは 1 以上の整数で指定してください');
   });
 });
 

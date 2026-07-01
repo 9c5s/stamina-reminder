@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import type { Bindings } from '../index';
 import { optionsToRecord } from '../lib/options';
-import { deleteTitle, isValidTitleMaster, KEY_PREFIX, putTitle } from '../lib/titles';
+import { deleteTitle, isValidTitleMaster, KEY_PREFIX, putTitle, TITLE_LIMITS } from '../lib/titles';
 import { ephemeral } from './ephemeral';
 
 interface Interaction {
@@ -24,23 +24,32 @@ export async function handleTitle(
       const name = String(opts.name ?? '').trim();
       if (!name) return ephemeral(c, 'タイトル名は必須です');
       const nameBytes = new TextEncoder().encode(name).length;
-      if (nameBytes > 490) {
-        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+      if (nameBytes > TITLE_LIMITS.NAME_MAX_BYTES) {
+        return ephemeral(
+          c,
+          `タイトル名が長すぎます (UTF-8 で ${TITLE_LIMITS.NAME_MAX_BYTES} バイト以内)`,
+        );
       }
       const max = Number(opts.max);
       // Discord 側でも integer option だが、二重防御として handler でも整数判定する
-      if (!Number.isInteger(max) || max <= 0) {
-        return ephemeral(c, '最大スタミナは1以上の整数で指定してください');
+      if (!Number.isInteger(max) || max < TITLE_LIMITS.MAX_MIN) {
+        return ephemeral(c, `最大スタミナは ${TITLE_LIMITS.MAX_MIN} 以上の整数で指定してください`);
       }
-      if (max > 100000) {
-        return ephemeral(c, '最大スタミナは 100000 以下で指定してください');
+      if (max > TITLE_LIMITS.MAX_MAX) {
+        return ephemeral(c, `最大スタミナは ${TITLE_LIMITS.MAX_MAX} 以下で指定してください`);
       }
       const regenMinutes = Number(opts.regen_minutes);
-      if (!Number.isInteger(regenMinutes) || regenMinutes <= 0) {
-        return ephemeral(c, '回復分数は1以上の整数で指定してください');
+      if (!Number.isInteger(regenMinutes) || regenMinutes < TITLE_LIMITS.REGEN_MINUTES_MIN) {
+        return ephemeral(
+          c,
+          `回復分数は ${TITLE_LIMITS.REGEN_MINUTES_MIN} 以上の整数で指定してください`,
+        );
       }
-      if (regenMinutes > 1440) {
-        return ephemeral(c, '回復分数は 1440 以下 (1 日) で指定してください');
+      if (regenMinutes > TITLE_LIMITS.REGEN_MINUTES_MAX) {
+        return ephemeral(
+          c,
+          `回復分数は ${TITLE_LIMITS.REGEN_MINUTES_MAX} 以下 (1 日) で指定してください`,
+        );
       }
       await putTitle(c.env.TITLES, {
         name,
@@ -88,7 +97,10 @@ export async function handleTitle(
       }
       if (!content) return ephemeral(c, 'タイトル未登録');
       if (truncated) {
-        content += `\n(他 ${list.keys.length - processed} 件は省略)`;
+        // 破損 skip 済みは processed に含まれ表示件数から除外済み。ここでカウントするのは
+        // truncation で「まだ触っていない key」のみで、その中には破損 key も含まれ得る。
+        // 文言を「未処理」にして「省略」より意味範囲を実装と一致させる。
+        content += `\n(他 ${list.keys.length - processed} 件は未処理)`;
       }
       return ephemeral(c, content);
     }
@@ -96,8 +108,11 @@ export async function handleTitle(
       const name = String(opts.name ?? '').trim();
       if (!name) return ephemeral(c, 'タイトル名は必須です');
       const nameBytes = new TextEncoder().encode(name).length;
-      if (nameBytes > 490) {
-        return ephemeral(c, 'タイトル名が長すぎます (UTF-8 で 490 バイト以内)');
+      if (nameBytes > TITLE_LIMITS.NAME_MAX_BYTES) {
+        return ephemeral(
+          c,
+          `タイトル名が長すぎます (UTF-8 で ${TITLE_LIMITS.NAME_MAX_BYTES} バイト以内)`,
+        );
       }
       await deleteTitle(c.env.TITLES, name);
       return ephemeral(c, `${name} を削除`);
