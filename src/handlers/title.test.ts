@@ -149,39 +149,32 @@ describe('handleTitle list', () => {
     }
   });
 
-  it('appends the未表示 suffix so shown + hidden equals list.keys.length', async () => {
-    // 1 件分すら入らない狭い擬似 LIMIT を作るために、非常に長いタイトル名を 2 件用意する。
-    // 1 件目の 1 行が SUFFIX_RESERVE を控えた LIMIT に収まらないケースは実運用では発生し
-    // にくいので、本ケースは「truncated 分岐に入ったとき shown ベースで数える」不変式が
-    // 破損 skip と混在しても崩れないことを固定する目的で残す。
-    const longName = 'あ'.repeat(20);
-    const kv = makeFakeKV({
-      [`${KEY_PREFIX}${longName}A`]: JSON.stringify({
-        name: `${longName}A`,
+  it('deterministically enters the truncation branch and preserves shown + hidden = list.keys.length', async () => {
+    // 1 行およそ 100+ 文字になる長い name を大量に用意して LIMIT=1900 を確実に超えさせる。
+    // 破損エントリも 1 件混ぜ、未表示分に破損 skip が含まれても不変式が成立することを固定する。
+    const entries: Record<string, string> = {};
+    // 破損エントリを先頭に置き、truncation 以前に必ず処理される順序を固定する
+    entries[`${KEY_PREFIX}壊れた`] = '{not-json';
+    for (let i = 0; i < 20; i++) {
+      // 99 文字 + 1 文字 (連番 A〜T) = 100 文字。NAME_MAX_CHARS=100 の境界にちょうど収まる
+      const name = 'あ'.repeat(99) + String.fromCharCode(0x41 + i);
+      entries[`${KEY_PREFIX}${name}`] = JSON.stringify({
+        name,
         max: 100,
         regen_minutes_per_point: 5,
-      }),
-      [`${KEY_PREFIX}壊れた`]: '{not-json',
-      [`${KEY_PREFIX}${longName}B`]: JSON.stringify({
-        name: `${longName}B`,
-        max: 100,
-        regen_minutes_per_point: 5,
-      }),
-    });
+      });
+    }
+    const kv = makeFakeKV(entries);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const { content } = await invoke(kv, subCommand('list', []));
-      // 3 件全てが正常だった場合の想定合計と現状の shown 分を比較する。
-      // shown + (未表示 N) = 3 になっていれば合計が list.keys.length と一致する不変式が成立する
-      const shownLines = content.split('\n').filter((l) => l.startsWith('- ')).length;
       const suffixMatch = content.match(/\(他 (\d+) 件は未表示\)/);
-      if (suffixMatch) {
-        const hidden = Number(suffixMatch[1]);
-        expect(shownLines + hidden).toBe(3);
-      } else {
-        // truncation 分岐に入らなかった (全件入りきった) 場合は破損 skip 分だけ落ちる想定
-        expect(shownLines).toBe(2);
-      }
+      // 大量 entry で確実に truncation 分岐に入るはずなので、else 側にすり抜ける実装退行を弾く
+      expect(suffixMatch).not.toBeNull();
+      const shownLines = content.split('\n').filter((l) => l.startsWith('- ')).length;
+      const hidden = Number(suffixMatch?.[1]);
+      // 20 件 + 破損 1 件 = 21 件で不変式 shown + hidden === list.keys.length を固定する
+      expect(shownLines + hidden).toBe(21);
       expect(warn).toHaveBeenCalled();
     } finally {
       warn.mockRestore();

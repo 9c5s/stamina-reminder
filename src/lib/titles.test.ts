@@ -69,6 +69,19 @@ describe('isValidTitleMaster', () => {
     expect(isValidTitleMaster({ name: '   ', max: 99, regen_minutes_per_point: 6 })).toBe(false);
   });
 
+  it('rejects a name with surrounding whitespace so canonical form stays enforced', () => {
+    // handler は trim 済みでしか put しないので、KV 直書きの前後空白付き値は同名で取得/削除できない孤立データになる
+    expect(isValidTitleMaster({ name: ' プリコネ', max: 99, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+    expect(isValidTitleMaster({ name: 'プリコネ ', max: 99, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+    expect(isValidTitleMaster({ name: '\tプリコネ\n', max: 99, regen_minutes_per_point: 6 })).toBe(
+      false,
+    );
+  });
+
   it('rejects a name whose UTF-8 byte length exceeds NAME_MAX_BYTES', () => {
     const overflowName = 'あ'.repeat(TITLE_LIMITS.NAME_MAX_BYTES); // 3 bytes/char * NAME_MAX_BYTES
     expect(isValidTitleMaster({ name: overflowName, max: 99, regen_minutes_per_point: 6 })).toBe(

@@ -39,6 +39,9 @@ export function isValidTitleMaster(v: unknown): v is TitleMaster {
   if (typeof t.name !== 'string') return false;
   const trimmed = t.name.trim();
   if (trimmed.length === 0) return false;
+  // handler は入力を trim してから保存/検索するため、前後空白付きレコードは list に出ても
+  // 同名で取得・削除できない孤立データになる。保存名の正規形を強制して不一致を許さない
+  if (t.name !== trimmed) return false;
   // Discord option の max_length と KV key の UTF-8 上限を両方適用する。
   // 100 文字超は Discord option から入力不能、490 バイト超は KV key に収まらない。
   if ([...t.name].length > TITLE_LIMITS.NAME_MAX_CHARS) return false;
