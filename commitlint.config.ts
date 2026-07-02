@@ -3,5 +3,7 @@ export default {
   rules: {
     'subject-case': [0],
     'scope-empty': [2, 'always'],
+    'body-empty': [2, 'always'],
+    'footer-empty': [2, 'always'],
   },
 };
