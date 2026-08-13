@@ -1,8 +1,16 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Bindings } from '../index';
-import { postChannelMessage } from '../lib/discord-rest';
+import {
+  classifyDeleteResponse,
+  deleteChannelMessage,
+  postChannelMessage,
+} from '../lib/discord-rest';
 import { optionsToRecord } from '../lib/options';
+import { parseRetryAfterMs } from '../lib/retry-after';
 import { calculateFullAtMs } from '../lib/stamina-calc';
+
+/** 満タン通知を自動削除するまでの期間 (24 時間) */
+const NOTIFICATION_DELETE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 interface StaminaRow {
   title_name: string;
@@ -11,6 +19,13 @@ interface StaminaRow {
   channel_id: string;
   registered_at_ms: number;
 }
+
+// sql.exec の型制約 (Record<string, SqlStorageValue>) を満たすため interface ではなく type で定義する
+type PendingDeleteRow = {
+  message_id: string;
+  channel_id: string;
+  delete_at_ms: number;
+};
 
 interface DispatchPayload {
   sub_name: 'add' | 'list' | 'cancel';
@@ -38,6 +53,14 @@ export class UserState extends DurableObject<Bindings> {
         channel_id        TEXT NOT NULL,
         registered_at_ms  INTEGER NOT NULL,
         PRIMARY KEY (title_name)
+      )
+    `);
+    this.sql.exec(`
+      CREATE TABLE IF NOT EXISTS pending_deletes (
+        message_id    TEXT NOT NULL,
+        channel_id    TEXT NOT NULL,
+        delete_at_ms  INTEGER NOT NULL,
+        PRIMARY KEY (message_id)
       )
     `);
   }
@@ -261,6 +284,25 @@ export class UserState extends DurableObject<Bindings> {
       }
 
       if (resp.ok) {
+        // 通知の自動削除を予約する。予約は best-effort であり、失敗しても通知成功の処理は続行する
+        // (ここで例外を伝播させると alarm 全体が再実行され通知が二重送信されるため)
+        try {
+          const msg = (await resp.json()) as { id?: unknown };
+          if (typeof msg.id === 'string' && msg.id) {
+            this.sql.exec(
+              `INSERT OR REPLACE INTO pending_deletes (message_id, channel_id, delete_at_ms)
+               VALUES (?, ?, ?)`,
+              msg.id,
+              r.channel_id,
+              Date.now() + NOTIFICATION_DELETE_AFTER_MS,
+            );
+          } else {
+            console.error(`message id missing for ${r.title_name}, skipping auto-delete schedule`);
+          }
+        } catch (err) {
+          console.error(`failed to parse message response for ${r.title_name}: ${err}`);
+        }
+
         // 通知成功 (2xx): 行を削除し retry エントリも削除する
         // full_at_ms も WHERE に含め、通知中に再登録された新しい行を誤って削除しない
         this.sql.exec(
@@ -274,15 +316,8 @@ export class UserState extends DurableObject<Bindings> {
 
       if (resp.status === 429) {
         // Discord の Retry-After (秒) を尊重してリトライ期限を保存し、レート制限を消費しない
-        const retryAfterRaw = resp.headers.get('Retry-After');
-        const retryAfterSec = retryAfterRaw ? Number(retryAfterRaw) : NaN;
-        const retryMs =
-          Number.isFinite(retryAfterSec) && retryAfterSec > 0
-            ? Math.ceil(retryAfterSec * 1000)
-            : 5000;
-        console.log(
-          `rate limited for ${r.title_name}, retry-after=${retryAfterRaw}s, rescheduling in ${retryMs}ms`,
-        );
+        const retryMs = parseRetryAfterMs(resp.headers.get('Retry-After'));
+        console.log(`rate limited for ${r.title_name}, rescheduling in ${retryMs}ms`);
         await this.ctx.storage.put(`retry:${r.title_name}`, Date.now() + retryMs);
         excludedTitles.push(r.title_name);
         continue;
@@ -318,7 +353,73 @@ export class UserState extends DurableObject<Bindings> {
       excludedTitles.push(r.title_name);
     }
 
+    await this.processPendingDeletes();
+
     await this.refreshAlarm();
+  }
+
+  /**
+   * 期限が到来した満タン通知メッセージを Discord から削除する。
+   * 再試行は行の delete_at_ms を未来に更新することで表現し、
+   * 次回 SELECT の WHERE 節で自然に除外されるためループは必ず収束する。
+   */
+  private async processPendingDeletes(): Promise<void> {
+    while (true) {
+      const now = Date.now();
+      // 各イテレーションで最古の due 行を 1 件だけ再 SELECT し、再試行更新を反映する
+      const rows = [
+        ...this.sql.exec<PendingDeleteRow>(
+          `SELECT message_id, channel_id, delete_at_ms FROM pending_deletes
+           WHERE delete_at_ms <= ?
+           ORDER BY delete_at_ms
+           LIMIT 1`,
+          now,
+        ),
+      ];
+      const due = rows[0];
+      if (!due) break;
+
+      let resp: Response;
+      try {
+        resp = await deleteChannelMessage({
+          botToken: this.env.DISCORD_BOT_TOKEN,
+          channelId: due.channel_id,
+          messageId: due.message_id,
+        });
+      } catch (err) {
+        // ネットワークエラー (AbortSignal.timeout 等): 60 秒後にリトライする
+        console.log(`delete network error for ${due.message_id}: ${err}, rescheduling in 60s`);
+        this.sql.exec(
+          `UPDATE pending_deletes SET delete_at_ms = ? WHERE message_id = ?`,
+          Date.now() + 60_000,
+          due.message_id,
+        );
+        continue;
+      }
+
+      const action = classifyDeleteResponse(resp.status, resp.headers.get('Retry-After'));
+      switch (action.kind) {
+        case 'done':
+          // 削除成功、または 404 (既に削除済み): 行を消して完了
+          this.sql.exec(`DELETE FROM pending_deletes WHERE message_id = ?`, due.message_id);
+          break;
+        case 'retry':
+          console.log(
+            `delete deferred for ${due.message_id} (status=${resp.status}), rescheduling in ${action.delayMs}ms`,
+          );
+          this.sql.exec(
+            `UPDATE pending_deletes SET delete_at_ms = ? WHERE message_id = ?`,
+            Date.now() + action.delayMs,
+            due.message_id,
+          );
+          break;
+        case 'give_up':
+          // 永続的なクライアントエラー (チャンネル削除等): 諦めて行を削除する
+          console.error(`delete failed permanently for ${due.message_id} (status=${resp.status})`);
+          this.sql.exec(`DELETE FROM pending_deletes WHERE message_id = ?`, due.message_id);
+          break;
+      }
+    }
   }
 
   /** ミリ秒タイムスタンプを JST の日時文字列に変換する */
@@ -331,7 +432,8 @@ export class UserState extends DurableObject<Bindings> {
    * retry-deferred な title (retry:* エントリが未来のもの) を stamina クエリから除外し、
    * 過去の full_at_ms が候補に混入して即時発火ループが起きるのを防ぐ。
    * retry deadline 自体は別 candidate として保持し、期限通りに再通知する。
-   * どちらの candidate も存在しない場合はアラームを削除する。
+   * 通知メッセージの削除予約 (pending_deletes) も candidate に含める。
+   * candidate が 1 つも存在しない場合はアラームを削除する。
    */
   private async refreshAlarm(): Promise<void> {
     const now = Date.now();
@@ -363,9 +465,17 @@ export class UserState extends DurableObject<Bindings> {
       ];
       nextPending = rows[0]?.next_at ?? null;
     }
+    // 削除予約は独自の delete_at_ms (再試行時は未来に更新済み) を持つため常に候補に含める
+    const deleteRows = [
+      ...this.sql.exec<{ next_at: number | null }>(
+        `SELECT MIN(delete_at_ms) AS next_at FROM pending_deletes`,
+      ),
+    ];
+    const nextDelete = deleteRows[0]?.next_at ?? null;
     const candidates: number[] = [];
     if (nextPending !== null) candidates.push(nextPending);
     if (minRetry !== null) candidates.push(minRetry);
+    if (nextDelete !== null) candidates.push(nextDelete);
     if (candidates.length === 0) {
       await this.ctx.storage.deleteAlarm();
     } else {

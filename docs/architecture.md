@@ -96,6 +96,19 @@ CREATE TABLE IF NOT EXISTS stamina (
 
 `alarm()` が走ったら `full_at_ms <= now` の行を取り出して通知、行は削除、残行があれば次の最小 `full_at_ms` で再 `setAlarm`。
 
+```sql
+CREATE TABLE IF NOT EXISTS pending_deletes (
+  message_id    TEXT NOT NULL,
+  channel_id    TEXT NOT NULL,
+  delete_at_ms  INTEGER NOT NULL,
+  PRIMARY KEY (message_id)
+);
+```
+- 通知メッセージはチャンネルに残り続けないよう 24 時間後に自動削除する
+- 通知成功時にレスポンスの message ID を `pending_deletes` に予約し、`alarm()` が期限到来分を `DELETE /channels/{channel_id}/messages/{message_id}` で削除する
+- 404 は削除済みとして完了扱い、429 は Retry-After 従属、その他は 60 秒後再試行 (永続 4xx は断念)
+- `refreshAlarm()` は `MIN(full_at_ms)`、retry 期限、`MIN(delete_at_ms)` の最小値で `setAlarm` する
+
 ## 6. ファイル構成
 
 ```
